@@ -1,0 +1,260 @@
+/**
+ * Google Gemini API integration for LLM-powered analysis
+ *
+ * Uses Gemini 1.5 Flash for cost efficiency. Supports both group and
+ * individual feedback modes. All prompts read from the Prompts sheet.
+ */
+
+// ============================================================================
+// GEMINI API CORE
+// ============================================================================
+
+/**
+ * Call Gemini API with a prompt
+ * @param {string} prompt - The prompt to send
+ * @param {Object} options - Optional settings
+ * @returns {string} The generated text response
+ */
+function callGemini(prompt, options = {}) {
+  const apiKey = getGeminiKey();
+  const model = options.model || getSetting('gemini_model') || 'gemini-1.5-flash';
+
+  const url = `${CONFIG.ENDPOINTS.GEMINI}/models/${model}:generateContent?key=${apiKey}`;
+
+  const payload = {
+    contents: [{
+      parts: [{
+        text: prompt
+      }]
+    }],
+    generationConfig: {
+      temperature: options.temperature ?? 0.3,
+      maxOutputTokens: options.maxTokens || 2048,
+      topP: options.topP || 0.8
+    }
+  };
+
+  const requestOptions = {
+    method: 'POST',
+    contentType: 'application/json',
+    payload: JSON.stringify(payload),
+    muteHttpExceptions: true
+  };
+
+  const response = UrlFetchApp.fetch(url, requestOptions);
+  const result = JSON.parse(response.getContentText());
+
+  if (response.getResponseCode() !== 200) {
+    const error = result.error?.message || 'Unknown Gemini API error';
+    throw new Error(`Gemini API error: ${error}`);
+  }
+
+  const text = result.candidates?.[0]?.content?.parts?.[0]?.text;
+  if (!text) {
+    throw new Error('No text in Gemini response');
+  }
+
+  return text.trim();
+}
+
+/**
+ * Call Gemini and parse JSON response
+ * @param {string} prompt - The prompt (should request JSON output)
+ * @param {Object} options - Optional settings
+ * @returns {Object} Parsed JSON object
+ */
+function callGeminiJSON(prompt, options = {}) {
+  let fullPrompt = prompt;
+  if (!prompt.toLowerCase().includes('json')) {
+    fullPrompt += '\n\nRespond with valid JSON only.';
+  }
+
+  const response = callGemini(fullPrompt, {
+    ...options,
+    temperature: options.temperature ?? 0.1
+  });
+
+  // Extract JSON from response (handle markdown code blocks)
+  let jsonStr = response;
+
+  const jsonMatch = response.match(/```(?:json)?\s*([\s\S]*?)```/);
+  if (jsonMatch) {
+    jsonStr = jsonMatch[1];
+  }
+
+  const objectMatch = jsonStr.match(/\{[\s\S]*\}/);
+  const arrayMatch = jsonStr.match(/\[[\s\S]*\]/);
+
+  if (objectMatch) {
+    jsonStr = objectMatch[0];
+  } else if (arrayMatch) {
+    jsonStr = arrayMatch[0];
+  }
+
+  try {
+    return JSON.parse(jsonStr);
+  } catch (e) {
+    Logger.log(`Failed to parse Gemini JSON response: ${response}`);
+    throw new Error(`Invalid JSON from Gemini: ${e.message}`);
+  }
+}
+
+// ============================================================================
+// SPEAKER IDENTIFICATION
+// ============================================================================
+
+/**
+ * Identify speakers from transcript introductions
+ * @param {string} transcriptExcerpt - First few minutes of transcript
+ * @returns {Object} Map of speaker labels to names (e.g. {"Speaker 0": "Maria"})
+ */
+function identifySpeakers(transcriptExcerpt) {
+  const prompt = getPrompt('SPEAKER_IDENTIFICATION', {
+    transcript: transcriptExcerpt
+  });
+
+  const speakerMap = callGeminiJSON(prompt);
+
+  Logger.log(`Identified speakers: ${JSON.stringify(speakerMap)}`);
+  return speakerMap;
+}
+
+/**
+ * Apply speaker names to a transcript
+ * @param {string} transcript - Raw transcript with speaker labels
+ * @param {Object} speakerMap - Map of labels to names
+ * @returns {string} Transcript with real names
+ */
+function applySpeakerNames(transcript, speakerMap) {
+  let namedTranscript = transcript;
+
+  for (const [label, name] of Object.entries(speakerMap)) {
+    if (!name || name === '?') continue;
+
+    // Replace "Speaker N:" with "Name:" in the formatted lines
+    const escapedLabel = label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const pattern = new RegExp(escapedLabel + ':', 'g');
+    namedTranscript = namedTranscript.replace(pattern, `${name}:`);
+  }
+
+  return namedTranscript;
+}
+
+/**
+ * Get list of unique student names from speaker map
+ * @param {Object} speakerMap
+ * @returns {string[]} Array of student names (excluding "Teacher" and "?")
+ */
+function getStudentNames(speakerMap) {
+  return Object.values(speakerMap)
+    .filter(name => name && name !== '?' && name.toLowerCase() !== 'teacher')
+    .filter((name, index, arr) => arr.indexOf(name) === index);
+}
+
+// ============================================================================
+// TEACHER FEEDBACK EXTRACTION
+// ============================================================================
+
+/**
+ * Extract teacher's verbal feedback from transcript
+ * @param {string} transcript - Full transcript
+ * @returns {string} Teacher feedback or empty string
+ */
+function extractTeacherFeedback(transcript) {
+  const prompt = getPrompt('TEACHER_FEEDBACK_EXTRACTION', {
+    transcript: transcript
+  });
+
+  const feedback = callGemini(prompt);
+
+  if (feedback === 'NO_FEEDBACK_FOUND' || feedback.includes('NO_FEEDBACK_FOUND')) {
+    return '';
+  }
+
+  return feedback;
+}
+
+// ============================================================================
+// DISCUSSION SUMMARY
+// ============================================================================
+
+/**
+ * Generate overall discussion summary
+ * @param {string} transcript - Named transcript
+ * @returns {string} Discussion summary
+ */
+function generateDiscussionSummary(transcript) {
+  const prompt = getPrompt('DISCUSSION_SUMMARY', {
+    transcript: transcript
+  });
+
+  return callGemini(prompt);
+}
+
+// ============================================================================
+// GROUP MODE FEEDBACK
+// ============================================================================
+
+/**
+ * Generate group feedback for the whole class
+ * @param {string} transcript - Named transcript
+ * @param {string} grade - Teacher's grade for the discussion
+ * @param {string} teacherFeedback - Teacher's verbal or written notes
+ * @returns {string} Group feedback paragraph
+ */
+function generateGroupFeedback(transcript, grade, teacherFeedback) {
+  const prompt = getPrompt('GROUP_FEEDBACK', {
+    transcript: transcript,
+    grade: grade || 'not yet assigned',
+    teacher_feedback: teacherFeedback || 'No specific teacher feedback provided.'
+  });
+
+  return callGemini(prompt, { temperature: 0.5 });
+}
+
+// ============================================================================
+// INDIVIDUAL MODE FEEDBACK
+// ============================================================================
+
+/**
+ * Generate personalized feedback for a single student
+ * @param {string} studentName
+ * @param {string} contributions - This student's extracted lines
+ * @param {string} transcript - Full named transcript (for context)
+ * @param {string} grade - Teacher's grade for this student
+ * @param {string} teacherFeedback - Teacher's verbal or written notes
+ * @returns {string} Personalized feedback paragraph
+ */
+function generateIndividualFeedback(studentName, contributions, transcript, grade, teacherFeedback) {
+  const prompt = getPrompt('INDIVIDUAL_FEEDBACK', {
+    student_name: studentName,
+    contributions: contributions || 'No specific contributions found in transcript.',
+    transcript: transcript,
+    grade: grade || 'not yet assigned',
+    teacher_feedback: teacherFeedback || 'No specific teacher feedback provided.'
+  });
+
+  return callGemini(prompt, { temperature: 0.5 });
+}
+
+/**
+ * Extract a specific student's contributions from a named transcript.
+ * Finds all lines where the student is the speaker.
+ *
+ * @param {string} namedTranscript - Transcript with real names applied
+ * @param {string} studentName - The student's name to filter for
+ * @returns {string} The student's lines concatenated
+ */
+function extractStudentContributions(namedTranscript, studentName) {
+  const lines = namedTranscript.split('\n');
+  const contributions = [];
+
+  for (const line of lines) {
+    // Match lines like "[0:42] Maria: some text" or "Maria: some text"
+    if (line.includes(studentName + ':')) {
+      contributions.push(line.trim());
+    }
+  }
+
+  return contributions.join('\n');
+}
