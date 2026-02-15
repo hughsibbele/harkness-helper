@@ -283,11 +283,10 @@ function postGradesForDiscussion(discussionId) {
     throw new Error(`Discussion not found: ${discussionId}`);
   }
 
-  // Get Canvas item ID: per-discussion overrides global default
-  const canvasItemId = discussion.canvas_assignment_id || getSetting('canvas_assignment_id');
-  if (!canvasItemId) {
-    throw new Error('No Canvas item ID set. Enter one in the canvas_assignment_id column on the Discussions sheet, or set a default in Settings.');
+  if (!discussion.canvas_assignment_id) {
+    throw new Error('No Canvas item ID set. Enter the Canvas assignment or discussion topic ID in the canvas_assignment_id column on the Discussions sheet.');
   }
+  const canvasItemId = discussion.canvas_assignment_id;
 
   const courseId = getSetting('canvas_course_id');
   if (!courseId) {

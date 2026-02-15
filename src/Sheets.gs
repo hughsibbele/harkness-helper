@@ -224,7 +224,6 @@ function initializeSettings() {
     'elevenlabs_model': 'scribe_v2',
     'canvas_course_id': '',
     'canvas_base_url': '',
-    'canvas_assignment_id': '',
     'canvas_item_type': 'assignment'
   };
 
