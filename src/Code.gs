@@ -439,7 +439,7 @@ function sendApprovedFeedback() {
     }
 
     // Post to Canvas
-    if (canvasEnabled && discussion.canvas_assignment_id) {
+    if (canvasEnabled && (discussion.canvas_assignment_id || getSetting('canvas_assignment_id'))) {
       try {
         const canvasResult = postGradesForDiscussion(discussionId);
         totalCanvasPosted += canvasResult.success;
@@ -623,10 +623,12 @@ function menuFetchCanvasCourseData() {
     info += '   - "discussion" if your Canvas grades are on Discussion Topics\n';
     info += '   - "assignment" if your Canvas grades are on regular Assignments\n\n';
 
-    info += '3. COPY AN ID TO YOUR DISCUSSION ROW\n';
-    info += '   Find the matching item below and copy its ID into the\n';
-    info += '   canvas_assignment_id column on the Discussions sheet.\n';
-    info += '   Each discussion row needs its own ID.\n\n';
+    info += '3. SET THE DEFAULT CANVAS ID (one-time)\n';
+    info += '   Find your item in the lists below and copy its ID into the\n';
+    info += '   canvas_assignment_id row in the Settings sheet. This becomes\n';
+    info += '   the default for ALL discussions. Both sections can share the\n';
+    info += '   same Canvas item — grades are sent per-section automatically.\n';
+    info += '   (You can still override per-discussion in the Discussions sheet.)\n\n';
 
     info += '4. MAKE SURE THE SECTION IS SET\n';
     info += '   Each Discussion row has a "section" column. When grades are sent,\n';
