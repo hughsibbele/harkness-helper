@@ -40,21 +40,6 @@ Transcript excerpt:
 
 JSON mapping:`,
 
-  DISCUSSION_SUMMARY: `Summarize this Harkness discussion for the teacher's records.
-
-Include:
-1. **Main themes/topics** discussed (2-3 bullet points)
-2. **Key insights** that emerged from the discussion
-3. **Discussion quality** assessment (engagement level, depth of analysis)
-4. **Notable moments** (breakthrough insights, good collaboration, etc.)
-
-Keep the summary to about 150-200 words.
-
-Transcript:
-{transcript}
-
-Discussion Summary:`,
-
   GROUP_FEEDBACK: `You are a high school teacher analyzing a Harkness discussion. You will produce exactly two paragraphs.
 
 **PARAGRAPH 1 — Discussion Summary** (Neutral Voice)
@@ -79,7 +64,6 @@ Write in the teacher's voice, directed at the class ("you" plural, "I" for the t
 - If the teacher intervened to guide the discussion, acknowledge this (e.g., "I had to provide the key synthesizing question").
 
 Grade: {grade}
-Teacher's notes: {teacher_feedback}
 
 Transcript:
 {transcript}
@@ -104,8 +88,10 @@ Write in the teacher's voice, directed at the student ("you"). The tone must be 
 - Medium grade (7-8.5): "Solid" participation with clear room to grow.
 - Lower grade (below 7): Encouraging but honest about what's missing.
 
+**Important:**
+- If the teacher gave oral feedback during the discussion (often near the end — look for phrases like "my evaluation," "my feedback," or the teacher summarizing), align your evaluation with their points.
+
 Grade: {grade}
-Teacher's notes: {teacher_feedback}
 
 {student_name}'s contributions:
 {contributions}
@@ -114,24 +100,6 @@ Full discussion transcript (for context):
 {transcript}
 
 Write the two paragraphs now (contribution summary first, then evaluative comment for {student_name}):`,
-
-  TEACHER_FEEDBACK_EXTRACTION: `You are analyzing a Harkness discussion transcript.
-
-The teacher typically gives an oral evaluative comment near the end of the discussion. Look for:
-- Phrases like "my evaluation of the discussion," "my feedback," "my evaluative comment," "let me say a few things about today"
-- The teacher summarizing, giving praise, or offering critique after the main discussion concludes
-- This may be split across multiple teacher comments or not explicitly labeled
-
-Extract and summarize the teacher's oral evaluative feedback.
-
-If there is no clear teacher feedback, return "NO_FEEDBACK_FOUND".
-
-Return ONLY the teacher's feedback, nothing else.
-
-Full transcript:
-{transcript}
-
-Teacher feedback:`
 
 };
 

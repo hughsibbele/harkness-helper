@@ -50,8 +50,7 @@ function initializeSheetHeaders(sheet, sheetName) {
     ],
     [CONFIG.SHEETS.DISCUSSIONS]: [
       'discussion_id', 'date', 'section', 'audio_file_id',
-      'status', 'next_step', 'grade', 'group_feedback',
-      'discussion_summary', 'approved',
+      'status', 'next_step', 'grade', 'group_feedback', 'approved',
       'canvas_assignment_id', 'canvas_item_type',
       'error_message', 'created_at', 'updated_at'
     ],
@@ -60,7 +59,7 @@ function initializeSheetHeaders(sheet, sheetName) {
     ],
     [CONFIG.SHEETS.TRANSCRIPTS]: [
       'discussion_id', 'raw_transcript', 'speaker_map', 'named_transcript',
-      'teacher_feedback', 'created_at', 'updated_at'
+      'created_at', 'updated_at'
     ],
     [CONFIG.SHEETS.SPEAKER_MAP]: [
       'discussion_id', 'speaker_label', 'suggested_name', 'student_name', 'confirmed'
@@ -259,7 +258,6 @@ function createDiscussion(data) {
     next_step: 'Waiting for transcription...',
     grade: '',
     group_feedback: '',
-    discussion_summary: '',
     approved: false,
     canvas_assignment_id: data.canvas_assignment_id || '',
     error_message: '',
@@ -394,7 +392,6 @@ function upsertTranscript(discussionId, data) {
       raw_transcript: data.raw_transcript || '',
       speaker_map: data.speaker_map || '{}',
       named_transcript: data.named_transcript || '',
-      teacher_feedback: data.teacher_feedback || '',
       created_at: now,
       updated_at: now
     });

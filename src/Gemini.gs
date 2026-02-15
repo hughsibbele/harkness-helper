@@ -152,46 +152,6 @@ function getStudentNames(speakerMap) {
 }
 
 // ============================================================================
-// TEACHER FEEDBACK EXTRACTION
-// ============================================================================
-
-/**
- * Extract teacher's verbal feedback from transcript
- * @param {string} transcript - Full transcript
- * @returns {string} Teacher feedback or empty string
- */
-function extractTeacherFeedback(transcript) {
-  const prompt = getPrompt('TEACHER_FEEDBACK_EXTRACTION', {
-    transcript: transcript
-  });
-
-  const feedback = callGemini(prompt);
-
-  if (feedback === 'NO_FEEDBACK_FOUND' || feedback.includes('NO_FEEDBACK_FOUND')) {
-    return '';
-  }
-
-  return feedback;
-}
-
-// ============================================================================
-// DISCUSSION SUMMARY
-// ============================================================================
-
-/**
- * Generate overall discussion summary
- * @param {string} transcript - Named transcript
- * @returns {string} Discussion summary
- */
-function generateDiscussionSummary(transcript) {
-  const prompt = getPrompt('DISCUSSION_SUMMARY', {
-    transcript: transcript
-  });
-
-  return callGemini(prompt);
-}
-
-// ============================================================================
 // GROUP MODE FEEDBACK
 // ============================================================================
 
@@ -199,14 +159,12 @@ function generateDiscussionSummary(transcript) {
  * Generate group feedback for the whole class
  * @param {string} transcript - Named transcript
  * @param {string} grade - Teacher's grade for the discussion
- * @param {string} teacherFeedback - Teacher's verbal or written notes
  * @returns {string} Group feedback paragraph
  */
-function generateGroupFeedback(transcript, grade, teacherFeedback) {
+function generateGroupFeedback(transcript, grade) {
   const prompt = getPrompt('GROUP_FEEDBACK', {
     transcript: transcript,
-    grade: grade || 'not yet assigned',
-    teacher_feedback: teacherFeedback || 'No specific teacher feedback provided.'
+    grade: grade || 'not yet assigned'
   });
 
   return callGemini(prompt, { temperature: 0.5, maxTokens: 4096 });
@@ -222,16 +180,14 @@ function generateGroupFeedback(transcript, grade, teacherFeedback) {
  * @param {string} contributions - This student's extracted lines
  * @param {string} transcript - Full named transcript (for context)
  * @param {string} grade - Teacher's grade for this student
- * @param {string} teacherFeedback - Teacher's verbal or written notes
  * @returns {string} Personalized feedback paragraph
  */
-function generateIndividualFeedback(studentName, contributions, transcript, grade, teacherFeedback) {
+function generateIndividualFeedback(studentName, contributions, transcript, grade) {
   const prompt = getPrompt('INDIVIDUAL_FEEDBACK', {
     student_name: studentName,
     contributions: contributions || 'No specific contributions found in transcript.',
     transcript: transcript,
-    grade: grade || 'not yet assigned',
-    teacher_feedback: teacherFeedback || 'No specific teacher feedback provided.'
+    grade: grade || 'not yet assigned'
   });
 
   return callGemini(prompt, { temperature: 0.5, maxTokens: 4096 });

@@ -175,24 +175,14 @@ function processSpeakerMapping(discussionId) {
   const confirmedMap = buildSpeakerMapObject(discussionId);
   const namedTranscript = applySpeakerNames(rawTranscript, confirmedMap);
 
-  // Extract teacher feedback
-  Utilities.sleep(300);
-  const teacherFeedback = extractTeacherFeedback(namedTranscript);
-
-  // Generate discussion summary
-  Utilities.sleep(300);
-  const summary = generateDiscussionSummary(namedTranscript);
-
   // Save to transcript and discussion records
   upsertTranscript(discussionId, {
     speaker_map: JSON.stringify(confirmedMap),
-    named_transcript: namedTranscript,
-    teacher_feedback: teacherFeedback
+    named_transcript: namedTranscript
   });
 
   updateDiscussion(discussionId, {
     status: CONFIG.STATUS.MAPPING,
-    discussion_summary: summary,
     next_step: isGroupMode()
       ? 'Enter grade on this row, then click "Generate Feedback"'
       : 'Review speaker map in SpeakerMap sheet, confirm all speakers, then click "Generate Feedback"'
@@ -301,7 +291,6 @@ function generateFeedbackForDiscussions() {
       if (!transcript) continue;
 
       const namedTranscript = String(transcript.named_transcript || transcript.raw_transcript || '');
-      const teacherFeedback = String(transcript.teacher_feedback || '');
 
       if (isGroupMode()) {
         // Group mode: need grade on Discussion row
@@ -313,7 +302,7 @@ function generateFeedbackForDiscussions() {
           continue;
         }
 
-        const feedback = generateGroupFeedback(namedTranscript, String(grade), teacherFeedback);
+        const feedback = generateGroupFeedback(namedTranscript, String(grade));
 
         updateDiscussion(discussionId, {
           group_feedback: feedback,
@@ -356,8 +345,7 @@ function generateFeedbackForDiscussions() {
               report.student_name,
               contributions,
               namedTranscript,
-              String(report.grade),
-              teacherFeedback
+              String(report.grade)
             );
 
             updateStudentReport(report.report_id, { feedback: feedback });
