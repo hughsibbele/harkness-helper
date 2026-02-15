@@ -204,7 +204,10 @@ function formatElevenLabsTranscript(result) {
     const minutes = Math.floor(totalSeconds / 60);
     const seconds = totalSeconds % 60;
     const timestamp = `${minutes}:${seconds.toString().padStart(2, '0')}`;
-    const label = seg.speaker != null ? `Speaker ${seg.speaker}` : 'Unknown';
+    // Normalize: ElevenLabs returns "speaker_1" → we want "Speaker 1"
+    const label = seg.speaker != null
+      ? `Speaker ${String(seg.speaker).replace(/\D+/g, '')}`
+      : 'Unknown';
     return `[${timestamp}] ${label}: ${seg.text}`;
   }).join('\n\n');
 }
