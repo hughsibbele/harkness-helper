@@ -605,36 +605,60 @@ function menuFetchCanvasCourseData() {
     const result = fetchCanvasCourseData(courseId);
 
     // Build info for dialog
-    let info = `Course: ${result.courseName}\nStudents synced: ${result.studentCount}\n\n`;
+    let info = '';
+    info += `Course: ${result.courseName}\n`;
+    info += `Students synced: ${result.studentCount}\n`;
+    info += `Sections: ${result.sections.map(s => s.name).join(', ')}\n`;
+    info += '\nStudents have been added to the Students sheet, auto-assigned to their Canvas section.\n';
 
-    info += 'SECTIONS:\n';
-    for (const s of result.sections) {
-      info += `  ${s.name} (ID: ${s.id})\n`;
-    }
-    info += '\nStudents have been auto-assigned to their Canvas section.\n';
-    info += 'Check the Students sheet to verify.\n\n';
+    info += '\n==================================================\n';
+    info += 'WHAT TO DO NEXT\n';
+    info += '==================================================\n\n';
 
-    info += 'ASSIGNMENTS (set canvas_item_type to "assignment" in Settings):\n\n';
-    for (const a of result.assignments) {
-      info += `ID: ${a.id} | ${a.name} | Due: ${a.due_at} | Points: ${a.points_possible}\n`;
+    info += '1. CHECK THE STUDENTS SHEET\n';
+    info += '   Verify students are listed with the correct section.\n\n';
+
+    info += '2. SET YOUR CANVAS ITEM TYPE (one-time)\n';
+    info += '   In the Settings sheet, set canvas_item_type to:\n';
+    info += '   - "discussion" if your Canvas grades are on Discussion Topics\n';
+    info += '   - "assignment" if your Canvas grades are on regular Assignments\n\n';
+
+    info += '3. COPY AN ID TO YOUR DISCUSSION ROW\n';
+    info += '   Find the matching item below and copy its ID into the\n';
+    info += '   canvas_assignment_id column on the Discussions sheet.\n';
+    info += '   Each discussion row needs its own ID.\n\n';
+
+    info += '4. MAKE SURE THE SECTION IS SET\n';
+    info += '   Each Discussion row has a "section" column. When grades are sent,\n';
+    info += '   only students in that section receive them. If you name your audio\n';
+    info += '   files like "Section 1 - 2024-01-15.m4a", this is set automatically.\n';
+    info += '   Otherwise, type the section name manually on the Discussions sheet.\n';
+
+    info += '\n==================================================\n';
+
+    if (result.assignments.length > 0) {
+      info += 'ASSIGNMENTS\n';
+      info += '==================================================\n\n';
+      for (const a of result.assignments) {
+        info += `ID: ${a.id} | ${a.name} | Due: ${a.due_at} | Points: ${a.points_possible}\n`;
+      }
     }
 
     if (result.discussionTopics.length > 0) {
-      info += '\nGRADED DISCUSSION TOPICS (set canvas_item_type to "discussion" in Settings):\n\n';
+      info += '\n==================================================\n';
+      info += 'GRADED DISCUSSION TOPICS\n';
+      info += '==================================================\n\n';
       for (const d of result.discussionTopics) {
         info += `ID: ${d.id} | ${d.name} | Due: ${d.due_at} | Points: ${d.points_possible}\n`;
       }
     }
-
-    info += '\nEnter the ID in the canvas_assignment_id column on the Discussions sheet.\n';
-    info += 'Set canvas_item_type in Settings to match your item type.\n';
 
     // Show in a dialog (HTML for scrollability)
     const html = HtmlService.createHtmlOutput(
       '<pre style="font-family: monospace; font-size: 12px; white-space: pre-wrap;">' +
       info.replace(/</g, '&lt;') +
       '</pre>'
-    ).setWidth(700).setHeight(500);
+    ).setWidth(700).setHeight(600);
 
     ui.showModalDialog(html, 'Canvas Course Data');
   } catch (e) {
