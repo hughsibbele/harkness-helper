@@ -75,13 +75,13 @@ function callGeminiJSON(prompt, options = {}) {
   });
 
   // Extract JSON from response (handle markdown code blocks)
-  let jsonStr = response;
+  // Strip code fences first — regex match can fail on certain Gemini formats
+  let jsonStr = response.trim()
+    .replace(/^```(?:json)?\s*\n?/g, '')
+    .replace(/\n?```\s*$/g, '')
+    .trim();
 
-  const jsonMatch = response.match(/```(?:json)?\s*([\s\S]*?)```/);
-  if (jsonMatch) {
-    jsonStr = jsonMatch[1];
-  }
-
+  // Extract the JSON object or array
   const objectMatch = jsonStr.match(/\{[\s\S]*\}/);
   const arrayMatch = jsonStr.match(/\[[\s\S]*\]/);
 

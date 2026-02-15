@@ -608,10 +608,12 @@ function formatSheets() {
       discussionsSheet.getRange(2, statusCol, 1000, 1).setDataValidation(rule);
     }
 
-    // Approved checkbox
+    // Approved checkbox (validation only — insertCheckboxes pre-fills FALSE which
+    // makes appendRow skip past 1000 rows)
     const approvedCol = getColumnIndex(CONFIG.SHEETS.DISCUSSIONS, 'approved');
     if (approvedCol > 0) {
-      discussionsSheet.getRange(2, approvedCol, 1000, 1).insertCheckboxes();
+      const checkboxRule = SpreadsheetApp.newDataValidation().requireCheckbox().build();
+      discussionsSheet.getRange(2, approvedCol, 1000, 1).setDataValidation(checkboxRule);
     }
 
     // canvas_item_type dropdown
@@ -646,7 +648,8 @@ function formatSheets() {
   if (speakerMapSheet) {
     const confirmedCol = getColumnIndex(CONFIG.SHEETS.SPEAKER_MAP, 'confirmed');
     if (confirmedCol > 0) {
-      speakerMapSheet.getRange(2, confirmedCol, 1000, 1).insertCheckboxes();
+      const checkboxRule = SpreadsheetApp.newDataValidation().requireCheckbox().build();
+      speakerMapSheet.getRange(2, confirmedCol, 1000, 1).setDataValidation(checkboxRule);
     }
   }
 
@@ -657,10 +660,12 @@ function formatSheets() {
     const sentCol = getColumnIndex(CONFIG.SHEETS.STUDENT_REPORTS, 'sent');
 
     if (approvedCol > 0) {
-      reportsSheet.getRange(2, approvedCol, 1000, 1).insertCheckboxes();
+      const checkboxRule = SpreadsheetApp.newDataValidation().requireCheckbox().build();
+      reportsSheet.getRange(2, approvedCol, 1000, 1).setDataValidation(checkboxRule);
     }
     if (sentCol > 0) {
-      reportsSheet.getRange(2, sentCol, 1000, 1).insertCheckboxes();
+      const checkboxRule = SpreadsheetApp.newDataValidation().requireCheckbox().build();
+      reportsSheet.getRange(2, sentCol, 1000, 1).setDataValidation(checkboxRule);
     }
   }
 
