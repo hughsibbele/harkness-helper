@@ -30,7 +30,8 @@ function callGemini(prompt, options = {}) {
     generationConfig: {
       temperature: options.temperature ?? 0.3,
       maxOutputTokens: options.maxTokens || 2048,
-      topP: options.topP || 0.8
+      topP: options.topP || 0.8,
+      ...(options.responseMimeType && { responseMimeType: options.responseMimeType })
     }
   };
 
@@ -71,7 +72,8 @@ function callGeminiJSON(prompt, options = {}) {
 
   const response = callGemini(fullPrompt, {
     ...options,
-    temperature: options.temperature ?? 0.1
+    temperature: options.temperature ?? 0.1,
+    responseMimeType: 'application/json'
   });
 
   // Extract JSON from response (handle markdown code blocks)
