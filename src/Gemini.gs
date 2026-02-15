@@ -94,8 +94,19 @@ function callGeminiJSON(prompt, options = {}) {
   try {
     return JSON.parse(jsonStr);
   } catch (e) {
-    Logger.log(`Failed to parse Gemini JSON response: ${response}`);
-    throw new Error(`Invalid JSON from Gemini: ${e.message}`);
+    // Fix common Gemini JSON issues: smart quotes, single quotes, trailing commas
+    const fixed = jsonStr
+      .replace(/[\u201C\u201D\u201E]/g, '"')
+      .replace(/[\u2018\u2019\u201A]/g, "'")
+      .replace(/'/g, '"')
+      .replace(/,\s*([}\]])/g, '$1');
+
+    try {
+      return JSON.parse(fixed);
+    } catch (e2) {
+      Logger.log(`Failed to parse Gemini JSON response: ${response}`);
+      throw new Error(`Invalid JSON from Gemini: ${e.message}`);
+    }
   }
 }
 
