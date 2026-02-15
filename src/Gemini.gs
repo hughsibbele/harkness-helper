@@ -209,7 +209,7 @@ function generateGroupFeedback(transcript, grade, teacherFeedback) {
     teacher_feedback: teacherFeedback || 'No specific teacher feedback provided.'
   });
 
-  return callGemini(prompt, { temperature: 0.5 });
+  return callGemini(prompt, { temperature: 0.5, maxTokens: 4096 });
 }
 
 // ============================================================================
@@ -234,7 +234,7 @@ function generateIndividualFeedback(studentName, contributions, transcript, grad
     teacher_feedback: teacherFeedback || 'No specific teacher feedback provided.'
   });
 
-  return callGemini(prompt, { temperature: 0.5 });
+  return callGemini(prompt, { temperature: 0.5, maxTokens: 4096 });
 }
 
 /**

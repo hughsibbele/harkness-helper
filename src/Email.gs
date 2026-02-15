@@ -93,21 +93,8 @@ function generateGroupFeedbackEmailHtml(discussion, studentName) {
   <div class="content">
     <p style="margin-bottom: 20px;">Hi ${studentName.split(' ')[0]},</p>
 
-    <div class="grade-box">
-      <div class="label">Discussion Grade</div>
-      <div class="grade">${discussion.grade || 'N/A'}</div>
-    </div>
-
-    ${discussion.discussion_summary ? `
-    <div class="section">
-      <h2>Discussion Summary</h2>
-      <p>${discussion.discussion_summary}</p>
-    </div>
-    ` : ''}
-
     <div class="section feedback">
-      <h2>Class Feedback</h2>
-      <p>${discussion.group_feedback || 'No feedback available.'}</p>
+      <p>${(discussion.group_feedback || 'No feedback available.').split('\n\n').join('</p><p>')}</p>
     </div>
   </div>
 
@@ -134,14 +121,6 @@ ${period} - ${date}
 
 Hi ${studentName.split(' ')[0]},
 
-DISCUSSION GRADE: ${discussion.grade || 'N/A'}
-
-${discussion.discussion_summary ? `DISCUSSION SUMMARY
--------------------
-${discussion.discussion_summary}
-
-` : ''}CLASS FEEDBACK
---------------
 ${discussion.group_feedback || 'No feedback available.'}
 
 ---
@@ -238,21 +217,8 @@ function generateIndividualFeedbackEmailHtml(report, discussion, studentName) {
   <div class="content">
     <p style="margin-bottom: 20px;">Hi ${studentName.split(' ')[0]},</p>
 
-    <div class="grade-box">
-      <div class="label">Your Grade</div>
-      <div class="grade">${report.grade || 'N/A'}</div>
-    </div>
-
-    ${report.participation_summary ? `
-    <div class="section">
-      <h2>Participation Summary</h2>
-      <p>${report.participation_summary}</p>
-    </div>
-    ` : ''}
-
     <div class="section feedback">
-      <h2>Feedback</h2>
-      <p>${report.feedback || 'Great participation! Keep up the good work.'}</p>
+      <p>${(report.feedback || 'Great participation! Keep up the good work.').split('\n\n').join('</p><p>')}</p>
     </div>
   </div>
 
@@ -279,14 +245,6 @@ ${period} - ${date}
 
 Hi ${studentName.split(' ')[0]},
 
-YOUR GRADE: ${report.grade || 'N/A'}
-
-${report.participation_summary ? `PARTICIPATION SUMMARY
----------------------
-${report.participation_summary}
-
-` : ''}FEEDBACK
---------
 ${report.feedback || 'Great participation! Keep up the good work.'}
 
 ---

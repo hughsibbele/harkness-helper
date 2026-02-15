@@ -55,60 +55,78 @@ Transcript:
 
 Discussion Summary:`,
 
-  GROUP_FEEDBACK: `Generate feedback for the whole class based on their Harkness discussion.
+  GROUP_FEEDBACK: `You are a high school teacher analyzing a Harkness discussion. You will produce exactly two paragraphs.
 
-The teacher gave this discussion a grade of {grade}.
+**PARAGRAPH 1 — Discussion Summary** (Neutral Voice)
+Write in a neutral, objective, third-person voice. Provide a detailed summary of the discussion's main topics and flow. Identify 2-3 "defining moments" — key turning points, breakthrough ideas, or significant challenges that shaped the conversation.
 
-Teacher's notes/feedback:
-{teacher_feedback}
+**PARAGRAPH 2 — Evaluative Comment** (Teacher Voice)
+Write in the teacher's voice, directed at the class ("you" plural, "I" for the teacher). The tone must be direct, informal, supportive, and clear. Follow this mandatory "Critique Sandwich" structure:
 
-Discussion transcript:
+1. **The Grade**: State the grade clearly and colloquially in the first sentence. (e.g., "This was a strong discussion, earning a solid 8.5 out of 10.", "This was a decent but not great start... 7/10.")
+2. **The Good**: Highlight 2-3 specific positive achievements. Credit specific students by name, linking them to their idea or contribution.
+3. **The Gap**: Identify the primary weakness or area for growth.
+4. **The Next Step**: Conclude with a single, clear, actionable goal for the next discussion.
+
+**Tone alignment with grade:**
+- High grade (9-10): Frame positives as "excellent" or "deep"; the gap is a "final step" to the next level.
+- Medium grade (7-8.5): Balanced ("solid," "decent start") with a more significant gap to work on.
+- Lower grade (below 7): Honest but encouraging; clear gap with concrete next steps.
+
+**Important:**
+- If the teacher gave oral feedback during the discussion (often near the end — look for phrases like "my evaluation," "my feedback," or the teacher summarizing), align your evaluation with their points.
+- Credit specific students by name for notable contributions.
+- If the teacher intervened to guide the discussion, acknowledge this (e.g., "I had to provide the key synthesizing question").
+
+Grade: {grade}
+Teacher's notes: {teacher_feedback}
+
+Transcript:
 {transcript}
 
-Write a supportive but honest group feedback paragraph (4-6 sentences) that:
-1. Summarizes the overall quality of the discussion
-2. Highlights specific strong moments or contributions
-3. Identifies areas where the class can improve their discussion skills
-4. Connects to Harkness discussion values (collaboration, evidence-based reasoning, building on others' ideas)
-5. Ends on an encouraging note
+Write the two paragraphs now (summary paragraph first, then evaluative comment):`,
 
-Group feedback:`,
+  INDIVIDUAL_FEEDBACK: `You are a high school teacher providing personalized feedback to {student_name} about their Harkness discussion participation. You will produce exactly two paragraphs.
 
-  INDIVIDUAL_FEEDBACK: `Generate personalized feedback for {student_name} based on their Harkness discussion participation.
+**PARAGRAPH 1 — Contribution Summary** (Neutral Voice)
+Write in a neutral, objective voice. Summarize what {student_name} contributed to the discussion — their main points, arguments, and how they engaged with other students' ideas. Note specific moments where they advanced or redirected the conversation.
 
-The teacher gave this student a grade of {grade}.
+**PARAGRAPH 2 — Evaluative Comment** (Teacher Voice)
+Write in the teacher's voice, directed at the student ("you"). The tone must be direct, informal, supportive, and clear. Follow this "Critique Sandwich" structure:
 
-Teacher's notes/feedback:
-{teacher_feedback}
+1. **The Grade**: State the grade clearly in the first sentence.
+2. **The Good**: Highlight 2-3 specific strengths from their participation, referencing actual points they made.
+3. **The Gap**: Identify their primary area for growth as a discussion participant.
+4. **The Next Step**: Conclude with a single, actionable goal for their next discussion.
 
-{student_name}'s contributions from the transcript:
+**Tone alignment with grade:**
+- High grade (9-10): "Excellent" contributions; the gap is a stretch goal.
+- Medium grade (7-8.5): "Solid" participation with clear room to grow.
+- Lower grade (below 7): Encouraging but honest about what's missing.
+
+Grade: {grade}
+Teacher's notes: {teacher_feedback}
+
+{student_name}'s contributions:
 {contributions}
 
 Full discussion transcript (for context):
 {transcript}
 
-Write a supportive but honest feedback paragraph (3-5 sentences) that:
-1. Acknowledges specific strengths from their participation
-2. References actual points they made when notable
-3. Provides one concrete suggestion for growth
-4. Ends on an encouraging note
-
-Feedback for {student_name}:`,
+Write the two paragraphs now (contribution summary first, then evaluative comment for {student_name}):`,
 
   TEACHER_FEEDBACK_EXTRACTION: `You are analyzing a Harkness discussion transcript.
 
-At the end of many discussions, the teacher provides verbal feedback to the class. This typically includes:
-- Overall assessment of the discussion quality
-- Highlights of good contributions
-- Areas for improvement
-- Specific student callouts (positive or constructive)
+The teacher typically gives an oral evaluative comment near the end of the discussion. Look for:
+- Phrases like "my evaluation of the discussion," "my feedback," "my evaluative comment," "let me say a few things about today"
+- The teacher summarizing, giving praise, or offering critique after the main discussion concludes
+- This may be split across multiple teacher comments or not explicitly labeled
 
-Extract ONLY the teacher's feedback section from this transcript.
-This is usually near the end, after the main discussion concludes.
+Extract and summarize the teacher's oral evaluative feedback.
 
-If there is no clear teacher feedback section, return "NO_FEEDBACK_FOUND".
+If there is no clear teacher feedback, return "NO_FEEDBACK_FOUND".
 
-Return ONLY the teacher feedback text, nothing else.
+Return ONLY the teacher's feedback, nothing else.
 
 Full transcript:
 {transcript}
