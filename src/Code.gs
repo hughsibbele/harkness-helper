@@ -614,10 +614,20 @@ function menuFetchCanvasCourseData() {
     info += '\nStudents have been auto-assigned to their Canvas section.\n';
     info += 'Check the Students sheet to verify.\n\n';
 
-    info += 'ASSIGNMENTS (use these IDs in the canvas_assignment_id column):\n\n';
+    info += 'ASSIGNMENTS (set canvas_item_type to "assignment" in Settings):\n\n';
     for (const a of result.assignments) {
       info += `ID: ${a.id} | ${a.name} | Due: ${a.due_at} | Points: ${a.points_possible}\n`;
     }
+
+    if (result.discussionTopics.length > 0) {
+      info += '\nGRADED DISCUSSION TOPICS (set canvas_item_type to "discussion" in Settings):\n\n';
+      for (const d of result.discussionTopics) {
+        info += `ID: ${d.id} | ${d.name} | Due: ${d.due_at} | Points: ${d.points_possible}\n`;
+      }
+    }
+
+    info += '\nEnter the ID in the canvas_assignment_id column on the Discussions sheet.\n';
+    info += 'Set canvas_item_type in Settings to match your item type.\n';
 
     // Show in a dialog (HTML for scrollability)
     const html = HtmlService.createHtmlOutput(

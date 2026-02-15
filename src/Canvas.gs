@@ -187,6 +187,54 @@ function stripHtml(html) {
 }
 
 // ============================================================================
+// CANVAS ITEM TYPE RESOLUTION
+// ============================================================================
+
+/**
+ * Get the effective Canvas item type for a discussion.
+ * Per-discussion override takes precedence over global setting.
+ *
+ * @param {Object} discussion - Discussion row object
+ * @returns {string} 'assignment' or 'discussion'
+ */
+function getCanvasItemType(discussion) {
+  const perDiscussion = discussion.canvas_item_type;
+  if (perDiscussion === 'assignment' || perDiscussion === 'discussion') {
+    return perDiscussion;
+  }
+  const global = getSetting('canvas_item_type');
+  return global === 'discussion' ? 'discussion' : 'assignment';
+}
+
+/**
+ * Resolve a Canvas item ID to an assignment ID for grade posting.
+ * If itemType is 'discussion', fetches the discussion topic to get its assignment_id.
+ * If itemType is 'assignment', returns itemId as-is.
+ *
+ * @param {string} courseId
+ * @param {string} itemId - The ID entered by the teacher
+ * @param {string} itemType - 'assignment' or 'discussion'
+ * @returns {string} The assignment ID for grade posting
+ */
+function resolveCanvasAssignmentId(courseId, itemId, itemType) {
+  if (itemType !== 'discussion') {
+    return itemId;
+  }
+
+  const topic = canvasRequest(`/courses/${courseId}/discussion_topics/${itemId}`);
+
+  if (!topic.assignment_id) {
+    throw new Error(
+      `Discussion topic ${itemId} is not a graded discussion (no linked assignment). ` +
+      `Only graded discussion topics can receive grades.`
+    );
+  }
+
+  Logger.log(`Resolved discussion topic ${itemId} to assignment ${topic.assignment_id}`);
+  return topic.assignment_id.toString();
+}
+
+// ============================================================================
 // GRADE POSTING
 // ============================================================================
 
@@ -236,13 +284,17 @@ function postGradesForDiscussion(discussionId) {
   }
 
   if (!discussion.canvas_assignment_id) {
-    throw new Error('No Canvas assignment configured for this discussion');
+    throw new Error('No Canvas item ID configured for this discussion. Enter an assignment ID or discussion topic ID in the canvas_assignment_id column.');
   }
 
   const courseId = getSetting('canvas_course_id');
   if (!courseId) {
     throw new Error('Canvas course ID not set in Settings');
   }
+
+  // Resolve item ID: if type is 'discussion', look up the linked assignment_id
+  const itemType = getCanvasItemType(discussion);
+  const assignmentId = resolveCanvasAssignmentId(courseId, discussion.canvas_assignment_id, itemType);
 
   const results = { success: 0, failed: 0, errors: [] };
 
@@ -267,7 +319,7 @@ function postGradesForDiscussion(discussionId) {
       }
 
       try {
-        postGrade(courseId, discussion.canvas_assignment_id, student.canvas_user_id, grade, feedback);
+        postGrade(courseId, assignmentId, student.canvas_user_id, grade, feedback);
         results.success++;
         Utilities.sleep(200);
       } catch (e) {
@@ -290,7 +342,7 @@ function postGradesForDiscussion(discussionId) {
       try {
         postGrade(
           courseId,
-          discussion.canvas_assignment_id,
+          assignmentId,
           student.canvas_user_id,
           report.grade,
           report.feedback
@@ -319,7 +371,7 @@ function postGradesForDiscussion(discussionId) {
  * and returns assignment + section info for teacher reference.
  *
  * @param {string} courseId
- * @returns {Object} {courseName, sections, studentCount, assignments}
+ * @returns {Object} {courseName, sections, studentCount, assignments, discussionTopics}
  */
 function fetchCanvasCourseData(courseId) {
   // Fetch course info
@@ -348,12 +400,26 @@ function fetchCanvasCourseData(courseId) {
     points_possible: a.points_possible
   }));
 
-  Logger.log(`Fetched ${assignmentList.length} assignments from course ${courseId}`);
+  // Fetch graded discussion topics
+  const topics = canvasRequestPaginated(`/courses/${courseId}/discussion_topics?order_by=recent_activity`);
+
+  const discussionTopicList = topics
+    .filter(t => t.assignment_id)
+    .map(t => ({
+      id: t.id,
+      name: t.title,
+      assignment_id: t.assignment_id,
+      due_at: t.due_at || 'No due date',
+      points_possible: t.points_possible || 'N/A'
+    }));
+
+  Logger.log(`Fetched ${assignmentList.length} assignments and ${discussionTopicList.length} graded discussion topics`);
 
   return {
     courseName: course.name,
     sections: sections,
     studentCount: studentCount,
-    assignments: assignmentList
+    assignments: assignmentList,
+    discussionTopics: discussionTopicList
   };
 }

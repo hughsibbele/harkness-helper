@@ -52,7 +52,8 @@ function initializeSheetHeaders(sheet, sheetName) {
       'discussion_id', 'date', 'section', 'audio_file_id',
       'status', 'next_step', 'grade', 'group_feedback',
       'discussion_summary', 'approved',
-      'canvas_assignment_id', 'error_message', 'created_at', 'updated_at'
+      'canvas_assignment_id', 'canvas_item_type',
+      'error_message', 'created_at', 'updated_at'
     ],
     [CONFIG.SHEETS.STUDENTS]: [
       'student_id', 'name', 'email', 'section', 'canvas_user_id'
@@ -222,7 +223,8 @@ function initializeSettings() {
     'gemini_model': 'gemini-1.5-flash',
     'elevenlabs_model': 'scribe_v2',
     'canvas_course_id': '',
-    'canvas_base_url': ''
+    'canvas_base_url': '',
+    'canvas_item_type': 'assignment'
   };
 
   for (const [key, value] of Object.entries(defaults)) {
@@ -613,6 +615,16 @@ function formatSheets() {
     const approvedCol = getColumnIndex(CONFIG.SHEETS.DISCUSSIONS, 'approved');
     if (approvedCol > 0) {
       discussionsSheet.getRange(2, approvedCol, 1000, 1).insertCheckboxes();
+    }
+
+    // canvas_item_type dropdown
+    const itemTypeCol = getColumnIndex(CONFIG.SHEETS.DISCUSSIONS, 'canvas_item_type');
+    if (itemTypeCol > 0) {
+      const itemTypeRule = SpreadsheetApp.newDataValidation()
+        .requireValueInList(['assignment', 'discussion'])
+        .setAllowInvalid(true)
+        .build();
+      discussionsSheet.getRange(2, itemTypeCol, 1000, 1).setDataValidation(itemTypeRule);
     }
 
     // Conditional formatting: error rows turn red
