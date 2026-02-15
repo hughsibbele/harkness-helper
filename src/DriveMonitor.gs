@@ -77,23 +77,24 @@ function checkForNewAudioFiles() {
 }
 
 /**
- * Parse class period and date from filename
+ * Parse section and date from filename
  * Expected formats:
- * - "Period 3 - 2024-01-15.m4a"
- * - "Period3_20240115.mp3"
+ * - "Section 3 - 2024-01-15.m4a"
+ * - "Period 3 - 2024-01-15.m4a" (legacy)
+ * - "S3_20240115.mp3"
  * - "P3 Discussion.m4a" (date defaults to today)
  *
  * @param {string} fileName
- * @returns {Object} {classPeriod, date}
+ * @returns {Object} {section, date}
  */
 function parseFileName(fileName) {
-  let classPeriod = '';
+  let section = '';
   let date = new Date().toISOString().split('T')[0];  // Default to today
 
-  // Try to extract period
-  const periodMatch = fileName.match(/[Pp](?:eriod\s*)?(\d+)/);
-  if (periodMatch) {
-    classPeriod = `Period ${periodMatch[1]}`;
+  // Try to extract section (supports "Section N", "Period N", "S3", "P3")
+  const sectionMatch = fileName.match(/[SsPp](?:ection\s*|eriod\s*)?(\d+)/);
+  if (sectionMatch) {
+    section = `Section ${sectionMatch[1]}`;
   }
 
   // Try to extract date
@@ -103,7 +104,7 @@ function parseFileName(fileName) {
     date = `${dateMatch[1]}-${dateMatch[2]}-${dateMatch[3]}`;
   }
 
-  return { classPeriod, date };
+  return { section, date };
 }
 
 /**
@@ -117,7 +118,7 @@ function processNewAudioFile(fileInfo) {
   // Create discussion record
   const discussionId = createDiscussion({
     date: parsed.date,
-    class_period: parsed.classPeriod,
+    section: parsed.section,
     audio_file_id: fileInfo.id
   });
 

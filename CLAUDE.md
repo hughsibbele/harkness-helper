@@ -60,7 +60,7 @@ Controlled by `mode` setting in the Settings sheet:
 | `ElevenLabs.gs` | Synchronous transcription via ElevenLabs Scribe v2, blob vs URL upload based on file size, Drive file sharing |
 | `Gemini.gs` | Gemini API calls, speaker ID, group/individual feedback generation, contribution extraction, discussion summaries |
 | `Canvas.gs` | Canvas LMS API: paginated requests, student sync, dual-mode grade posting, course data fetch |
-| `DriveMonitor.gs` | Upload folder monitoring, filename parsing (period + date extraction), folder setup |
+| `DriveMonitor.gs` | Upload folder monitoring, filename parsing (section + date extraction), folder setup |
 | `Email.gs` | Dual-mode HTML/plaintext email templates, distribution with settings-based channel control |
 
 ### Sheets Structure (7 sheets)

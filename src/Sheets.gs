@@ -49,13 +49,13 @@ function initializeSheetHeaders(sheet, sheetName) {
       'setting_key', 'setting_value'
     ],
     [CONFIG.SHEETS.DISCUSSIONS]: [
-      'discussion_id', 'date', 'class_period', 'audio_file_id',
+      'discussion_id', 'date', 'section', 'audio_file_id',
       'status', 'next_step', 'grade', 'group_feedback',
       'discussion_summary', 'approved',
       'canvas_assignment_id', 'error_message', 'created_at', 'updated_at'
     ],
     [CONFIG.SHEETS.STUDENTS]: [
-      'student_id', 'name', 'email', 'class_period', 'canvas_user_id'
+      'student_id', 'name', 'email', 'section', 'canvas_user_id'
     ],
     [CONFIG.SHEETS.TRANSCRIPTS]: [
       'discussion_id', 'raw_transcript', 'speaker_map', 'named_transcript',
@@ -251,7 +251,7 @@ function createDiscussion(data) {
   insertRow(CONFIG.SHEETS.DISCUSSIONS, {
     discussion_id: discussionId,
     date: data.date || new Date().toISOString().split('T')[0],
-    class_period: data.class_period || '',
+    section: data.section || '',
     audio_file_id: data.audio_file_id || '',
     status: CONFIG.STATUS.UPLOADED,
     next_step: 'Waiting for transcription...',
@@ -315,12 +315,12 @@ function updateDiscussion(discussionId, data) {
 // ============================================================================
 
 /**
- * Get all students for a class period
- * @param {string} classPeriod
+ * Get all students for a section
+ * @param {string} section
  * @returns {Object[]}
  */
-function getStudentsByClass(classPeriod) {
-  return findRows(CONFIG.SHEETS.STUDENTS, 'class_period', classPeriod);
+function getStudentsBySection(section) {
+  return findRows(CONFIG.SHEETS.STUDENTS, 'section', section);
 }
 
 /**
@@ -335,17 +335,17 @@ function getStudent(studentId) {
 /**
  * Get a student by name (case-insensitive)
  * @param {string} name
- * @param {string} classPeriod - Optional class filter
+ * @param {string} section - Optional section filter
  * @returns {Object|null}
  */
-function getStudentByName(name, classPeriod = null) {
+function getStudentByName(name, section = null) {
   const rows = getAllRows(CONFIG.SHEETS.STUDENTS);
   const normalizedName = name.toLowerCase().trim();
 
   return rows.find(row => {
     const nameMatch = String(row.name).toLowerCase().trim() === normalizedName;
-    const classMatch = classPeriod ? row.class_period === classPeriod : true;
-    return nameMatch && classMatch;
+    const sectionMatch = section ? row.section === section : true;
+    return nameMatch && sectionMatch;
   }) || null;
 }
 
@@ -355,7 +355,7 @@ function getStudentByName(name, classPeriod = null) {
  * @returns {string} Student ID
  */
 function upsertStudent(data) {
-  const existing = getStudentByName(data.name, data.class_period);
+  const existing = getStudentByName(data.name, data.section);
 
   if (existing) {
     updateRow(CONFIG.SHEETS.STUDENTS, existing._rowIndex, data);

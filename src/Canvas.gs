@@ -95,38 +95,67 @@ function canvasRequestPaginated(endpoint) {
 // ============================================================================
 
 /**
- * Get students enrolled in a course
+ * Get sections for a Canvas course
  * @param {string} courseId
- * @returns {Object[]} Array of student objects
+ * @returns {Object[]} Array of {id, name}
  */
-function getCanvasStudents(courseId) {
-  const students = canvasRequestPaginated(
-    `/courses/${courseId}/users?enrollment_type[]=student&include[]=email`
-  );
-
-  return students.map(s => ({
-    canvasUserId: s.id,
-    name: s.name,
-    sortableName: s.sortable_name,
-    email: s.email || '',
-    loginId: s.login_id || ''
+function getCanvasSections(courseId) {
+  const sections = canvasRequestPaginated(`/courses/${courseId}/sections`);
+  return sections.map(s => ({
+    id: s.id,
+    name: s.name
   }));
 }
 
 /**
- * Sync Canvas students to local Students sheet
+ * Get students enrolled in a course, with enrollment data to determine section
  * @param {string} courseId
- * @param {string} classPeriod - Class period to assign
+ * @returns {Object[]} Array of student objects with sectionId
+ */
+function getCanvasStudents(courseId) {
+  const students = canvasRequestPaginated(
+    `/courses/${courseId}/users?enrollment_type[]=student&include[]=email&include[]=enrollments`
+  );
+
+  return students.map(s => {
+    // Find the student enrollment for this course to get section ID
+    const enrollment = (s.enrollments || []).find(
+      e => e.type === 'StudentEnrollment' && e.course_id === Number(courseId)
+    );
+    return {
+      canvasUserId: s.id,
+      name: s.name,
+      sortableName: s.sortable_name,
+      email: s.email || '',
+      loginId: s.login_id || '',
+      sectionId: enrollment ? enrollment.course_section_id : null
+    };
+  });
+}
+
+/**
+ * Sync Canvas students to local Students sheet.
+ * If sectionMap is provided, auto-assigns section names from Canvas section data.
+ *
+ * @param {string} courseId
+ * @param {string} fallbackSection - Section name to use if section can't be determined
+ * @param {Object} sectionMap - Optional map of Canvas section IDs to section names
  * @returns {number} Number of students synced
  */
-function syncCanvasStudents(courseId, classPeriod) {
+function syncCanvasStudents(courseId, fallbackSection, sectionMap = null) {
   const canvasStudents = getCanvasStudents(courseId);
 
   for (const student of canvasStudents) {
+    // Determine section: use Canvas section data if available, otherwise fallback
+    let section = fallbackSection;
+    if (sectionMap && student.sectionId && sectionMap[student.sectionId]) {
+      section = sectionMap[student.sectionId];
+    }
+
     upsertStudent({
       name: student.name,
       email: student.email,
-      class_period: classPeriod,
+      section: section,
       canvas_user_id: student.canvasUserId.toString()
     });
   }
@@ -226,8 +255,8 @@ function postGradesForDiscussion(discussionId) {
       throw new Error('No grade set on discussion row');
     }
 
-    const students = discussion.class_period
-      ? getStudentsByClass(discussion.class_period)
+    const students = discussion.section
+      ? getStudentsBySection(discussion.section)
       : getAllRows(CONFIG.SHEETS.STUDENTS);
 
     for (const student of students) {
@@ -286,19 +315,28 @@ function postGradesForDiscussion(discussionId) {
 
 /**
  * Fetch comprehensive course data from Canvas.
- * Populates Students sheet and returns assignment list for teacher reference.
+ * Fetches sections, auto-assigns students to their Canvas sections,
+ * and returns assignment + section info for teacher reference.
  *
  * @param {string} courseId
- * @param {string} classPeriod - Class period to assign to synced students
- * @returns {Object} {studentCount, assignments}
+ * @returns {Object} {courseName, sections, studentCount, assignments}
  */
-function fetchCanvasCourseData(courseId, classPeriod) {
+function fetchCanvasCourseData(courseId) {
   // Fetch course info
   const course = canvasRequest(`/courses/${courseId}`);
   Logger.log(`Fetching data for course: ${course.name}`);
 
-  // Sync students
-  const studentCount = syncCanvasStudents(courseId, classPeriod);
+  // Fetch sections and build ID → name map
+  const sections = getCanvasSections(courseId);
+  const sectionMap = {};
+  for (const section of sections) {
+    sectionMap[section.id] = section.name;
+  }
+  Logger.log(`Found ${sections.length} sections: ${sections.map(s => s.name).join(', ')}`);
+
+  // Sync students with auto-section assignment
+  const fallbackSection = sections.length === 1 ? sections[0].name : course.name;
+  const studentCount = syncCanvasStudents(courseId, fallbackSection, sectionMap);
 
   // Fetch assignments
   const assignments = canvasRequestPaginated(`/courses/${courseId}/assignments?order_by=due_at`);
@@ -314,6 +352,7 @@ function fetchCanvasCourseData(courseId, classPeriod) {
 
   return {
     courseName: course.name,
+    sections: sections,
     studentCount: studentCount,
     assignments: assignmentList
   };

@@ -18,7 +18,7 @@
  */
 function generateGroupFeedbackEmailHtml(discussion, studentName) {
   const date = discussion.date || 'Recent Discussion';
-  const period = discussion.class_period || 'Class';
+  const period = discussion.section || 'Class';
 
   return `
 <!DOCTYPE html>
@@ -125,7 +125,7 @@ function generateGroupFeedbackEmailHtml(discussion, studentName) {
  */
 function generateGroupFeedbackEmailPlainText(discussion, studentName) {
   const date = discussion.date || 'Recent Discussion';
-  const period = discussion.class_period || 'Class';
+  const period = discussion.section || 'Class';
 
   return `
 HARKNESS DISCUSSION REPORT
@@ -163,7 +163,7 @@ If you have questions, please speak with your teacher.
  */
 function generateIndividualFeedbackEmailHtml(report, discussion, studentName) {
   const date = discussion.date || 'Recent Discussion';
-  const period = discussion.class_period || 'Class';
+  const period = discussion.section || 'Class';
 
   return `
 <!DOCTYPE html>
@@ -270,7 +270,7 @@ function generateIndividualFeedbackEmailHtml(report, discussion, studentName) {
  */
 function generateIndividualFeedbackEmailPlainText(report, discussion, studentName) {
   const date = discussion.date || 'Recent Discussion';
-  const period = discussion.class_period || 'Class';
+  const period = discussion.section || 'Class';
 
   return `
 HARKNESS DISCUSSION REPORT
@@ -320,8 +320,8 @@ function sendAllReportsForDiscussion(discussionId) {
 
   if (isGroupMode()) {
     // Group mode: send same email to all students in the class
-    const students = discussion.class_period
-      ? getStudentsByClass(discussion.class_period)
+    const students = discussion.section
+      ? getStudentsBySection(discussion.section)
       : getAllRows(CONFIG.SHEETS.STUDENTS);
 
     for (const student of students) {
@@ -398,8 +398,8 @@ function previewEmails(discussionId) {
   const subject = subjectTemplate.replace('{date}', discussion.date || 'Recent');
 
   if (isGroupMode()) {
-    const students = discussion.class_period
-      ? getStudentsByClass(discussion.class_period)
+    const students = discussion.section
+      ? getStudentsBySection(discussion.section)
       : getAllRows(CONFIG.SHEETS.STUDENTS);
 
     return students.map(s => ({

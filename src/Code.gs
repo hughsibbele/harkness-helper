@@ -248,12 +248,12 @@ function createStudentReportsFromSpeakerMap(discussionId) {
 
   for (const studentName of studentNames) {
     // Find or create student record
-    let student = getStudentByName(studentName, discussion.class_period);
+    let student = getStudentByName(studentName, discussion.section);
     if (!student) {
       const studentId = upsertStudent({
         name: studentName,
         email: '',
-        class_period: discussion.class_period || ''
+        section: discussion.section || ''
       });
       student = { student_id: studentId };
     }
@@ -561,15 +561,21 @@ function menuSyncCanvasRoster() {
     return;
   }
 
-  const periodResponse = ui.prompt('Class Period',
-    'Enter the class period to assign to these students (e.g., "Period 3"):',
-    ui.ButtonSet.OK_CANCEL);
-
-  if (periodResponse.getSelectedButton() !== ui.Button.OK) return;
-
   try {
-    const count = syncCanvasStudents(courseId, periodResponse.getResponseText());
-    ui.alert('Roster Synced', `Synced ${count} students from Canvas.`, ui.ButtonSet.OK);
+    // Fetch sections to auto-assign students
+    const sections = getCanvasSections(courseId);
+    const sectionMap = {};
+    for (const section of sections) {
+      sectionMap[section.id] = section.name;
+    }
+
+    const fallbackSection = sections.length === 1 ? sections[0].name : '';
+    const count = syncCanvasStudents(courseId, fallbackSection, sectionMap);
+
+    let message = `Synced ${count} students from Canvas.\n\n`;
+    message += `Sections found: ${sections.map(s => s.name).join(', ')}\n`;
+    message += 'Students auto-assigned to their Canvas section.';
+    ui.alert('Roster Synced', message, ui.ButtonSet.OK);
   } catch (e) {
     ui.alert('Error', e.message, ui.ButtonSet.OK);
   }
@@ -595,27 +601,28 @@ function menuFetchCanvasCourseData() {
     setSetting('canvas_course_id', courseId);
   }
 
-  const periodResponse = ui.prompt('Class Period',
-    'Enter the class period for this course (e.g., "Period 3"):',
-    ui.ButtonSet.OK_CANCEL);
-
-  if (periodResponse.getSelectedButton() !== ui.Button.OK) return;
-
   try {
-    const result = fetchCanvasCourseData(courseId, periodResponse.getResponseText());
+    const result = fetchCanvasCourseData(courseId);
 
-    // Build assignment list for dialog
-    let assignmentInfo = `Course: ${result.courseName}\nStudents synced: ${result.studentCount}\n\n`;
-    assignmentInfo += 'ASSIGNMENTS (use these IDs in the canvas_assignment_id column):\n\n';
+    // Build info for dialog
+    let info = `Course: ${result.courseName}\nStudents synced: ${result.studentCount}\n\n`;
 
+    info += 'SECTIONS:\n';
+    for (const s of result.sections) {
+      info += `  ${s.name} (ID: ${s.id})\n`;
+    }
+    info += '\nStudents have been auto-assigned to their Canvas section.\n';
+    info += 'Check the Students sheet to verify.\n\n';
+
+    info += 'ASSIGNMENTS (use these IDs in the canvas_assignment_id column):\n\n';
     for (const a of result.assignments) {
-      assignmentInfo += `ID: ${a.id} | ${a.name} | Due: ${a.due_at} | Points: ${a.points_possible}\n`;
+      info += `ID: ${a.id} | ${a.name} | Due: ${a.due_at} | Points: ${a.points_possible}\n`;
     }
 
     // Show in a dialog (HTML for scrollability)
     const html = HtmlService.createHtmlOutput(
       '<pre style="font-family: monospace; font-size: 12px; white-space: pre-wrap;">' +
-      assignmentInfo.replace(/</g, '&lt;') +
+      info.replace(/</g, '&lt;') +
       '</pre>'
     ).setWidth(700).setHeight(500);
 
