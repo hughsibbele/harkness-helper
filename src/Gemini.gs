@@ -96,17 +96,42 @@ function callGeminiJSON(prompt, options = {}) {
   try {
     return JSON.parse(jsonStr);
   } catch (e) {
-    // Fix common Gemini JSON issues: smart quotes, single quotes, trailing commas
-    const fixed = jsonStr
+    // Fix common Gemini JSON issues: smart quotes, single quotes, trailing commas,
+    // unescaped newlines inside string values, control characters
+    let fixed = jsonStr
       .replace(/[\u201C\u201D\u201E]/g, '"')
       .replace(/[\u2018\u2019\u201A]/g, "'")
       .replace(/'/g, '"')
       .replace(/,\s*([}\]])/g, '$1');
 
+    // Fix unescaped newlines/tabs inside JSON string values
+    fixed = fixed.replace(/"([^"]*?)"/g, function(match, content) {
+      return '"' + content
+        .replace(/\n/g, '\\n')
+        .replace(/\r/g, '\\r')
+        .replace(/\t/g, '\\t') + '"';
+    });
+
+    // Remove trailing commas that might appear after fixing
+    fixed = fixed.replace(/,\s*([}\]])/g, '$1');
+
     try {
       return JSON.parse(fixed);
     } catch (e2) {
+      // Last resort: try to extract key-value pairs manually for simple objects
       Logger.log(`Failed to parse Gemini JSON response: ${response}`);
+      const pairPattern = /"([^"]+)"\s*:\s*"([^"]*?)"/g;
+      let match;
+      const result = {};
+      let found = false;
+      while ((match = pairPattern.exec(response)) !== null) {
+        result[match[1]] = match[2];
+        found = true;
+      }
+      if (found) {
+        Logger.log(`Recovered JSON via regex extraction: ${JSON.stringify(result)}`);
+        return result;
+      }
       throw new Error(`Invalid JSON from Gemini: ${e.message}`);
     }
   }
