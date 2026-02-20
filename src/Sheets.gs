@@ -923,7 +923,7 @@ function formatSheets() {
     const nextStepCol = getColumnIndex(CONFIG.SHEETS.DISCUSSIONS, 'next_step');
     if (nextStepCol > 0) {
       discussionsSheet.getRange(2, nextStepCol, 1000, 1)
-        .setWrap(true)
+        .setWrapStrategy(SpreadsheetApp.WrapStrategy.CLIP)
         .setBackground('#fff9c4');
       discussionsSheet.setColumnWidth(nextStepCol, 280);
     }
@@ -963,11 +963,11 @@ function formatSheets() {
     // Wrap group_feedback and error_message
     const feedbackCol = getColumnIndex(CONFIG.SHEETS.DISCUSSIONS, 'group_feedback');
     if (feedbackCol > 0) {
-      discussionsSheet.getRange(2, feedbackCol, 1000, 1).setWrap(true);
+      discussionsSheet.getRange(2, feedbackCol, 1000, 1).setWrapStrategy(SpreadsheetApp.WrapStrategy.CLIP);
     }
     const errorCol = getColumnIndex(CONFIG.SHEETS.DISCUSSIONS, 'error_message');
     if (errorCol > 0) {
-      discussionsSheet.getRange(2, errorCol, 1000, 1).setWrap(true);
+      discussionsSheet.getRange(2, errorCol, 1000, 1).setWrapStrategy(SpreadsheetApp.WrapStrategy.CLIP);
     }
 
     // Conditional formatting: error rows red, sent rows green
@@ -1040,11 +1040,11 @@ function formatSheets() {
     // Wrap feedback and contributions
     const feedbackCol = getColumnIndex(CONFIG.SHEETS.STUDENT_REPORTS, 'feedback');
     if (feedbackCol > 0) {
-      reportsSheet.getRange(2, feedbackCol, 1000, 1).setWrap(true);
+      reportsSheet.getRange(2, feedbackCol, 1000, 1).setWrapStrategy(SpreadsheetApp.WrapStrategy.CLIP);
     }
     const contribCol = getColumnIndex(CONFIG.SHEETS.STUDENT_REPORTS, 'transcript_contributions');
     if (contribCol > 0) {
-      reportsSheet.getRange(2, contribCol, 1000, 1).setWrap(true);
+      reportsSheet.getRange(2, contribCol, 1000, 1).setWrapStrategy(SpreadsheetApp.WrapStrategy.CLIP);
     }
 
     reportsSheet.setTabColor('#9c27b0');
@@ -1068,7 +1068,7 @@ function formatSheets() {
     promptsSheet.setTabColor('#fdd835');
     const textCol = getColumnIndex(CONFIG.SHEETS.PROMPTS, 'prompt_text');
     if (textCol > 0) {
-      promptsSheet.getRange(2, textCol, 100, 1).setWrap(true);
+      promptsSheet.getRange(2, textCol, 100, 1).setWrapStrategy(SpreadsheetApp.WrapStrategy.CLIP);
       promptsSheet.setColumnWidth(textCol, 600);
     }
   }
