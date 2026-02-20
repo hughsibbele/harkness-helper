@@ -1,0 +1,746 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: #f5f5f7;
+      color: #1d1d1f;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 24px 16px;
+      -webkit-user-select: none;
+      user-select: none;
+    }
+
+    h1 {
+      font-size: 20px;
+      font-weight: 600;
+      margin-bottom: 32px;
+      color: #1d1d1f;
+    }
+
+    /* Timer */
+    .timer {
+      font-size: 48px;
+      font-weight: 300;
+      font-variant-numeric: tabular-nums;
+      letter-spacing: 2px;
+      margin-bottom: 40px;
+      color: #1d1d1f;
+    }
+
+    .timer.recording { color: #d42020; }
+    .timer.paused { color: #8e8e93; }
+
+    /* Recording indicator */
+    .indicator {
+      display: none;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 16px;
+      font-size: 14px;
+      font-weight: 500;
+      color: #d42020;
+    }
+
+    .indicator.visible { display: flex; }
+
+    .indicator .dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: #d42020;
+      animation: pulse 1.5s ease-in-out infinite;
+    }
+
+    .indicator.paused-indicator { color: #8e8e93; }
+    .indicator.paused-indicator .dot {
+      background: #8e8e93;
+      animation: none;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.3; }
+    }
+
+    /* Buttons */
+    .controls {
+      display: flex;
+      gap: 24px;
+      align-items: center;
+      margin-bottom: 40px;
+    }
+
+    .btn-record {
+      width: 80px;
+      height: 80px;
+      border-radius: 50%;
+      border: 4px solid #d42020;
+      background: #d42020;
+      cursor: pointer;
+      transition: all 0.2s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .btn-record:active { transform: scale(0.93); }
+
+    .btn-record .inner {
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      background: white;
+      transition: all 0.2s;
+    }
+
+    .btn-secondary {
+      width: 56px;
+      height: 56px;
+      border-radius: 50%;
+      border: 2px solid #8e8e93;
+      background: white;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 20px;
+      color: #1d1d1f;
+      transition: all 0.2s;
+    }
+
+    .btn-secondary:active { transform: scale(0.93); background: #f0f0f0; }
+
+    .btn-stop {
+      border-color: #1d1d1f;
+    }
+
+    .btn-stop .stop-icon {
+      width: 20px;
+      height: 20px;
+      border-radius: 4px;
+      background: #1d1d1f;
+    }
+
+    .btn-pause .pause-icon {
+      display: flex;
+      gap: 4px;
+    }
+
+    .btn-pause .pause-icon span {
+      width: 5px;
+      height: 18px;
+      background: #1d1d1f;
+      border-radius: 2px;
+    }
+
+    .btn-resume .resume-icon {
+      width: 0;
+      height: 0;
+      border-left: 14px solid #1d1d1f;
+      border-top: 9px solid transparent;
+      border-bottom: 9px solid transparent;
+      margin-left: 3px;
+    }
+
+    /* Form */
+    .form {
+      width: 100%;
+      max-width: 400px;
+      display: none;
+      flex-direction: column;
+      gap: 20px;
+    }
+
+    .form.visible { display: flex; }
+
+    .form-group label {
+      display: block;
+      font-size: 13px;
+      font-weight: 600;
+      color: #6e6e73;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 8px;
+    }
+
+    .section-buttons {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .section-btn {
+      padding: 10px 20px;
+      border-radius: 20px;
+      border: 2px solid #d1d1d6;
+      background: white;
+      font-size: 15px;
+      cursor: pointer;
+      transition: all 0.15s;
+      color: #1d1d1f;
+    }
+
+    .section-btn:active { transform: scale(0.96); }
+    .section-btn.selected {
+      border-color: #007aff;
+      background: #007aff;
+      color: white;
+    }
+
+    .custom-section {
+      display: none;
+      margin-top: 8px;
+    }
+
+    .custom-section.visible { display: block; }
+
+    input[type="text"],
+    input[type="date"] {
+      width: 100%;
+      padding: 12px 16px;
+      border: 2px solid #d1d1d6;
+      border-radius: 12px;
+      font-size: 16px;
+      background: white;
+      color: #1d1d1f;
+      -webkit-appearance: none;
+    }
+
+    input:focus {
+      outline: none;
+      border-color: #007aff;
+    }
+
+    .btn-upload {
+      width: 100%;
+      padding: 16px;
+      border: none;
+      border-radius: 14px;
+      background: #007aff;
+      color: white;
+      font-size: 17px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+      margin-top: 8px;
+    }
+
+    .btn-upload:active { transform: scale(0.98); background: #0066d6; }
+    .btn-upload:disabled { background: #b0b0b5; cursor: default; transform: none; }
+
+    .btn-discard {
+      background: none;
+      border: none;
+      color: #8e8e93;
+      font-size: 15px;
+      cursor: pointer;
+      padding: 12px;
+      text-align: center;
+    }
+
+    .btn-discard:active { color: #d42020; }
+
+    /* Status messages */
+    .status {
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      gap: 16px;
+      text-align: center;
+    }
+
+    .status.visible { display: flex; }
+
+    .spinner {
+      width: 40px;
+      height: 40px;
+      border: 4px solid #d1d1d6;
+      border-top-color: #007aff;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    .status-text {
+      font-size: 17px;
+      color: #6e6e73;
+    }
+
+    .success-icon {
+      width: 56px;
+      height: 56px;
+      border-radius: 50%;
+      background: #34c759;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 28px;
+      color: white;
+    }
+
+    .error-text { color: #d42020; }
+
+    .btn-again {
+      padding: 12px 32px;
+      border: 2px solid #007aff;
+      border-radius: 12px;
+      background: white;
+      color: #007aff;
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+      margin-top: 8px;
+    }
+
+    .btn-again:active { background: #f0f0f0; }
+
+    .hidden { display: none !important; }
+  </style>
+</head>
+<body>
+
+  <h1>Harkness Recorder</h1>
+
+  <!-- Recording indicator -->
+  <div id="indicator" class="indicator">
+    <div class="dot"></div>
+    <span id="indicator-text">Recording</span>
+  </div>
+
+  <!-- Timer -->
+  <div id="timer" class="timer">0:00</div>
+
+  <!-- Controls: Ready state -->
+  <div id="controls-ready" class="controls">
+    <button class="btn-record" id="btn-start" onclick="startRecording()">
+      <div class="inner"></div>
+    </button>
+  </div>
+
+  <!-- Controls: Recording state -->
+  <div id="controls-recording" class="controls hidden">
+    <button class="btn-secondary btn-pause" id="btn-pause" onclick="pauseRecording()">
+      <div class="pause-icon"><span></span><span></span></div>
+    </button>
+    <button class="btn-secondary btn-stop" id="btn-stop" onclick="stopRecording()">
+      <div class="stop-icon"></div>
+    </button>
+  </div>
+
+  <!-- Controls: Paused state -->
+  <div id="controls-paused" class="controls hidden">
+    <button class="btn-secondary btn-resume" id="btn-resume" onclick="resumeRecording()">
+      <div class="resume-icon"></div>
+    </button>
+    <button class="btn-secondary btn-stop" onclick="stopRecording()">
+      <div class="stop-icon"></div>
+    </button>
+  </div>
+
+  <!-- Details form (after recording) -->
+  <div id="form" class="form">
+    <div class="form-group">
+      <label>Section</label>
+      <div id="section-buttons" class="section-buttons">
+        <!-- Populated dynamically -->
+      </div>
+      <div id="custom-section" class="custom-section">
+        <input type="text" id="input-custom-section" placeholder="Type section name...">
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label>Date</label>
+      <input type="date" id="input-date">
+    </div>
+
+    <button class="btn-upload" id="btn-upload" onclick="uploadRecording()">Upload</button>
+    <button class="btn-discard" onclick="discardRecording()">Discard</button>
+  </div>
+
+  <!-- Uploading status -->
+  <div id="status-uploading" class="status">
+    <div class="spinner"></div>
+    <div class="status-text">Uploading recording...</div>
+  </div>
+
+  <!-- Success status -->
+  <div id="status-success" class="status">
+    <div class="success-icon">&#10003;</div>
+    <div class="status-text" id="success-text">Uploaded!</div>
+    <button class="btn-again" onclick="resetUI()">Record Another</button>
+  </div>
+
+  <!-- Error status -->
+  <div id="status-error" class="status">
+    <div class="status-text error-text" id="error-text">Upload failed</div>
+    <button class="btn-again" onclick="retryUpload()">Retry</button>
+    <button class="btn-discard" onclick="resetUI()">Start Over</button>
+  </div>
+
+  <script>
+    // =====================================================================
+    // STATE
+    // =====================================================================
+
+    var mediaRecorder = null;
+    var audioChunks = [];
+    var audioBlob = null;
+    var mimeType = '';
+    var timerInterval = null;
+    var elapsedSeconds = 0;
+    var wakeLock = null;
+    var sections = [];
+    var selectedSection = '';
+
+    // =====================================================================
+    // INITIALIZATION
+    // =====================================================================
+
+    // Set date to today
+    document.getElementById('input-date').value = new Date().toISOString().split('T')[0];
+
+    // Load sections from server
+    google.script.run
+      .withSuccessHandler(function(config) {
+        sections = config.sections || [];
+        buildSectionButtons();
+      })
+      .withFailureHandler(function() {
+        buildSectionButtons();
+      })
+      .getRecorderConfig();
+
+    function buildSectionButtons() {
+      var container = document.getElementById('section-buttons');
+      container.innerHTML = '';
+
+      for (var i = 0; i < sections.length; i++) {
+        var btn = document.createElement('button');
+        btn.className = 'section-btn';
+        btn.textContent = sections[i];
+        btn.setAttribute('data-section', sections[i]);
+        btn.onclick = function() { selectSection(this); };
+        container.appendChild(btn);
+      }
+
+      // "Other" button
+      var otherBtn = document.createElement('button');
+      otherBtn.className = 'section-btn';
+      otherBtn.textContent = 'Other...';
+      otherBtn.setAttribute('data-section', '__custom__');
+      otherBtn.onclick = function() { selectSection(this); };
+      container.appendChild(otherBtn);
+    }
+
+    function selectSection(btn) {
+      // Deselect all
+      var buttons = document.querySelectorAll('.section-btn');
+      for (var i = 0; i < buttons.length; i++) {
+        buttons[i].classList.remove('selected');
+      }
+      btn.classList.add('selected');
+
+      var value = btn.getAttribute('data-section');
+      if (value === '__custom__') {
+        document.getElementById('custom-section').classList.add('visible');
+        document.getElementById('input-custom-section').focus();
+        selectedSection = '';
+      } else {
+        document.getElementById('custom-section').classList.remove('visible');
+        selectedSection = value;
+      }
+    }
+
+    // =====================================================================
+    // RECORDING
+    // =====================================================================
+
+    function startRecording() {
+      navigator.mediaDevices.getUserMedia({ audio: true })
+        .then(function(stream) {
+          // Pick best supported mime type
+          var types = [
+            'audio/webm;codecs=opus',
+            'audio/webm',
+            'audio/mp4',
+            'audio/ogg;codecs=opus'
+          ];
+          mimeType = '';
+          for (var i = 0; i < types.length; i++) {
+            if (MediaRecorder.isTypeSupported(types[i])) {
+              mimeType = types[i];
+              break;
+            }
+          }
+
+          var options = { audioBitsPerSecond: 64000 };
+          if (mimeType) options.mimeType = mimeType;
+
+          mediaRecorder = new MediaRecorder(stream, options);
+          mimeType = mediaRecorder.mimeType;
+          audioChunks = [];
+
+          mediaRecorder.ondataavailable = function(e) {
+            if (e.data.size > 0) audioChunks.push(e.data);
+          };
+
+          mediaRecorder.onstop = function() {
+            audioBlob = new Blob(audioChunks, { type: mimeType });
+            stream.getTracks().forEach(function(t) { t.stop(); });
+            showForm();
+          };
+
+          // Request data every 5 seconds for safety
+          mediaRecorder.start(5000);
+
+          elapsedSeconds = 0;
+          startTimer();
+          showState('recording');
+          requestWakeLock();
+        })
+        .catch(function(err) {
+          alert('Microphone access denied. Please allow microphone access and try again.');
+        });
+    }
+
+    function pauseRecording() {
+      if (mediaRecorder && mediaRecorder.state === 'recording') {
+        mediaRecorder.pause();
+        stopTimer();
+        showState('paused');
+      }
+    }
+
+    function resumeRecording() {
+      if (mediaRecorder && mediaRecorder.state === 'paused') {
+        mediaRecorder.resume();
+        startTimer();
+        showState('recording');
+      }
+    }
+
+    function stopRecording() {
+      if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+        stopTimer();
+        mediaRecorder.stop();
+        releaseWakeLock();
+      }
+    }
+
+    // =====================================================================
+    // TIMER
+    // =====================================================================
+
+    function startTimer() {
+      timerInterval = setInterval(function() {
+        elapsedSeconds++;
+        updateTimerDisplay();
+      }, 1000);
+    }
+
+    function stopTimer() {
+      clearInterval(timerInterval);
+      timerInterval = null;
+    }
+
+    function updateTimerDisplay() {
+      var m = Math.floor(elapsedSeconds / 60);
+      var s = elapsedSeconds % 60;
+      document.getElementById('timer').textContent = m + ':' + (s < 10 ? '0' : '') + s;
+    }
+
+    // =====================================================================
+    // UPLOAD
+    // =====================================================================
+
+    function uploadRecording() {
+      // Resolve section
+      var section = selectedSection;
+      if (!section) {
+        section = document.getElementById('input-custom-section').value.trim();
+      }
+      if (!section) {
+        alert('Please select or type a section name.');
+        return;
+      }
+
+      var date = document.getElementById('input-date').value;
+      if (!date) {
+        alert('Please select a date.');
+        return;
+      }
+
+      var ext = getExtension(mimeType);
+      var fileName = section + ' - ' + date + ext;
+
+      showState('uploading');
+
+      // Convert blob to base64
+      var reader = new FileReader();
+      reader.onloadend = function() {
+        var base64 = reader.result.split(',')[1];
+
+        google.script.run
+          .withSuccessHandler(function(result) {
+            document.getElementById('success-text').textContent =
+              'Uploaded: ' + result.fileName;
+            showState('success');
+          })
+          .withFailureHandler(function(err) {
+            document.getElementById('error-text').textContent =
+              'Upload failed: ' + (err.message || err);
+            showState('error');
+          })
+          .uploadAudioFile(base64, fileName, mimeType);
+      };
+      reader.readAsDataURL(audioBlob);
+    }
+
+    function retryUpload() {
+      showForm();
+    }
+
+    function discardRecording() {
+      audioBlob = null;
+      audioChunks = [];
+      resetUI();
+    }
+
+    function getExtension(mime) {
+      if (mime.indexOf('webm') !== -1) return '.webm';
+      if (mime.indexOf('mp4') !== -1) return '.m4a';
+      if (mime.indexOf('ogg') !== -1) return '.ogg';
+      return '.webm';
+    }
+
+    // =====================================================================
+    // UI STATE MANAGEMENT
+    // =====================================================================
+
+    function showState(state) {
+      // Hide everything
+      document.getElementById('controls-ready').classList.add('hidden');
+      document.getElementById('controls-recording').classList.add('hidden');
+      document.getElementById('controls-paused').classList.add('hidden');
+      document.getElementById('form').classList.remove('visible');
+      document.getElementById('status-uploading').classList.remove('visible');
+      document.getElementById('status-success').classList.remove('visible');
+      document.getElementById('status-error').classList.remove('visible');
+
+      var timer = document.getElementById('timer');
+      var indicator = document.getElementById('indicator');
+      timer.className = 'timer';
+      indicator.className = 'indicator';
+
+      switch (state) {
+        case 'ready':
+          document.getElementById('controls-ready').classList.remove('hidden');
+          break;
+
+        case 'recording':
+          document.getElementById('controls-recording').classList.remove('hidden');
+          timer.classList.add('recording');
+          indicator.classList.add('visible');
+          document.getElementById('indicator-text').textContent = 'Recording';
+          indicator.classList.remove('paused-indicator');
+          break;
+
+        case 'paused':
+          document.getElementById('controls-paused').classList.remove('hidden');
+          timer.classList.add('paused');
+          indicator.classList.add('visible', 'paused-indicator');
+          document.getElementById('indicator-text').textContent = 'Paused';
+          break;
+
+        case 'form':
+          document.getElementById('form').classList.add('visible');
+          timer.classList.add('hidden');
+          indicator.classList.remove('visible');
+          break;
+
+        case 'uploading':
+          document.getElementById('status-uploading').classList.add('visible');
+          timer.classList.add('hidden');
+          indicator.classList.remove('visible');
+          break;
+
+        case 'success':
+          document.getElementById('status-success').classList.add('visible');
+          timer.classList.add('hidden');
+          indicator.classList.remove('visible');
+          break;
+
+        case 'error':
+          document.getElementById('status-error').classList.add('visible');
+          timer.classList.add('hidden');
+          indicator.classList.remove('visible');
+          break;
+      }
+    }
+
+    function showForm() {
+      showState('form');
+    }
+
+    function resetUI() {
+      audioBlob = null;
+      audioChunks = [];
+      selectedSection = '';
+      elapsedSeconds = 0;
+      updateTimerDisplay();
+
+      // Reset section selection
+      var buttons = document.querySelectorAll('.section-btn');
+      for (var i = 0; i < buttons.length; i++) {
+        buttons[i].classList.remove('selected');
+      }
+      document.getElementById('custom-section').classList.remove('visible');
+      document.getElementById('input-custom-section').value = '';
+      document.getElementById('input-date').value = new Date().toISOString().split('T')[0];
+
+      showState('ready');
+      releaseWakeLock();
+    }
+
+    // =====================================================================
+    // WAKE LOCK (keep screen on during recording)
+    // =====================================================================
+
+    function requestWakeLock() {
+      if ('wakeLock' in navigator) {
+        navigator.wakeLock.request('screen')
+          .then(function(lock) { wakeLock = lock; })
+          .catch(function() {});
+      }
+    }
+
+    function releaseWakeLock() {
+      if (wakeLock) {
+        wakeLock.release().catch(function() {});
+        wakeLock = null;
+      }
+    }
+
+    // Reacquire wake lock if page becomes visible again
+    document.addEventListener('visibilitychange', function() {
+      if (document.visibilityState === 'visible' && mediaRecorder && mediaRecorder.state === 'recording') {
+        requestWakeLock();
+      }
+    });
+  </script>
+</body>
+</html>

@@ -1,28 +1,36 @@
 # Harkness Discussion Helper
 
-A Google Apps Script application that automates the workflow for Harkness discussions: recording transcription with speaker identification, AI-powered summaries and evaluations, Canvas integration for reflections and grade posting, and email distribution to students.
+A Google Apps Script application that automates the workflow for Harkness discussions: recording transcription with speaker identification, AI-powered feedback generation, Canvas integration for grade posting, and email distribution to students.
 
 ## Features
 
-- **Automatic Transcription**: Upload audio recordings to Google Drive and get them automatically transcribed with speaker diarization (AssemblyAI)
-- **Speaker Identification**: AI identifies students from their introductions ("Hi, I'm...")
-- **Participation Analysis**: Generate individual participation summaries for each student
-- **Canvas Integration**: Pull student reflections and post grades/feedback
-- **Email Distribution**: Send personalized reports to students
+- **Automatic Transcription**: Upload audio recordings to Google Drive and get them automatically transcribed with speaker diarization (ElevenLabs Scribe v2)
+- **Speaker Identification**: Gemini AI identifies students from their introductions ("Hi, I'm...")
+- **Two Grading Modes**: Group mode (one grade for the whole class) or Individual mode (per-student grades and feedback)
+- **AI Feedback Generation**: Gemini generates 2-paragraph feedback using a critique sandwich format, editable by the teacher before sending
+- **Canvas Integration**: Sync student roster, post grades and feedback (supports assignments and discussion topics, multi-section)
+- **Email Distribution**: Send personalized HTML reports to students via Gmail
 - **Teacher Review**: Review and approve everything in Google Sheets before sending
+- **Editable Prompts**: All AI prompts live in a Prompts sheet — teachers can customize tone, criteria, and style without touching code
 
 ## Architecture
 
 ```
-Phone Recording → Google Drive → AssemblyAI (transcription + diarization)
-                                        ↓
-                              Google Gemini (speaker ID, summaries, evaluation)
-                                        ↓
-                              Canvas API (pull reflections, post grades)
-                                        ↓
-                              Google Sheets (teacher review)
-                                        ↓
-                              Gmail + Canvas (distribution)
+Phone Recording → Google Drive (Upload folder)
+    → ElevenLabs Scribe v2 (synchronous transcription + speaker diarization)
+    → Google Gemini (speaker ID from introductions)
+    → Teacher reviews speaker map in SpeakerMap sheet
+    → MODE BRANCH:
+        Group:      Teacher enters ONE grade → Gemini group feedback → approve → send
+        Individual: Teacher enters per-student grades → Gemini per-student feedback → approve → send
+    → Gmail (report emails) + Canvas API (grade posting)
+```
+
+### Status Machine
+
+```
+uploaded → transcribing → mapping → review → approved → sent
+                                                        ↘ error (from any step)
 ```
 
 ## Setup Instructions
@@ -32,30 +40,33 @@ Phone Recording → Google Drive → AssemblyAI (transcription + diarization)
 1. Go to [script.google.com](https://script.google.com) and create a new project
 2. Delete the default `Code.gs` content
 3. Create files for each `.gs` file in the `src/` folder:
-   - `Code.gs`
-   - `Config.gs`
-   - `Sheets.gs`
-   - `Prompts.gs`
-   - `AssemblyAI.gs`
-   - `Gemini.gs`
-   - `Canvas.gs`
-   - `DriveMonitor.gs`
-   - `Email.gs`
-4. Copy the content from each file in this repository
-5. Update `appsscript.json` (View > Show manifest file) with the contents from this repo
+   - `Code.gs` — Entry point: menu, triggers, processing loop, feedback generation, send orchestration
+   - `Config.gs` — Global config, Script Properties access, mode helpers, validation
+   - `Sheets.gs` — Generic CRUD layer over Google Sheets (the "database")
+   - `Prompts.gs` — Sheet-based prompt system with default fallbacks
+   - `ElevenLabs.gs` — Synchronous transcription via ElevenLabs Scribe v2
+   - `Gemini.gs` — Gemini API: speaker ID, feedback generation, contribution extraction
+   - `Canvas.gs` — Canvas LMS API: roster sync, grade posting, course data fetch
+   - `DriveMonitor.gs` — Upload folder monitoring, filename parsing
+   - `Email.gs` — HTML/plaintext email templates and distribution
+   - `Webapp.gs` — Web app entry point and audio upload handler
+4. Create one HTML file:
+   - `RecorderApp.html` — Mobile recording UI (create via File > New > HTML file)
+5. Copy the content from each file in this repository
+6. Update `appsscript.json` (View > Show manifest file) with the contents from this repo
 
 ### 2. Create the Tracking Spreadsheet
 
-1. Create a new Google Spreadsheet
+1. Import `template.xlsx` into Google Sheets (File > Import), or create a new spreadsheet manually
 2. Copy the spreadsheet ID from the URL (the long string between `/d/` and `/edit`)
 3. Save this ID for configuration
 
 ### 3. Get API Keys
 
-#### AssemblyAI
-1. Sign up at [assemblyai.com](https://www.assemblyai.com/)
-2. Go to Dashboard and copy your API key
-3. Cost: ~$0.37/hour of audio (first hours free)
+#### ElevenLabs
+1. Sign up at [elevenlabs.io](https://elevenlabs.io/)
+2. Go to your Profile and copy your API key
+3. Used for: Scribe v2 speech-to-text with speaker diarization
 
 #### Google Gemini
 1. Go to [AI Studio](https://aistudio.google.com/app/apikey)
@@ -77,14 +88,13 @@ In the Apps Script editor:
 
 | Property | Description | Required |
 |----------|-------------|----------|
-| `ASSEMBLYAI_API_KEY` | Your AssemblyAI API key | ✅ |
-| `GEMINI_API_KEY` | Your Gemini API key | ✅ |
-| `SPREADSHEET_ID` | ID of your tracking spreadsheet | ✅ |
-| `AUDIO_FOLDER_ID` | Set automatically by setup | ✅ |
-| `PROCESSING_FOLDER_ID` | Set automatically by setup | ✅ |
+| `ELEVENLABS_API_KEY` | Your ElevenLabs API key | Yes |
+| `GEMINI_API_KEY` | Your Gemini API key | Yes |
+| `SPREADSHEET_ID` | ID of your tracking spreadsheet | Yes |
+| `AUDIO_FOLDER_ID` | Set automatically by setup | Yes |
+| `PROCESSING_FOLDER_ID` | Set automatically by setup | Yes |
 | `CANVAS_API_TOKEN` | Your Canvas access token | Optional |
 | `CANVAS_BASE_URL` | Your Canvas URL (e.g., `https://school.instructure.com`) | Optional |
-| `CANVAS_COURSE_ID` | The Canvas course ID | Optional |
 
 ### 5. Run Initial Setup
 
@@ -96,74 +106,95 @@ In the Apps Script editor:
 ### 6. Setup Automatic Triggers
 
 1. Open your tracking spreadsheet
-2. You should see a "🎓 Harkness Helper" menu
+2. You should see a "Harkness Helper" menu
 3. Click "Setup Automatic Triggers"
+
+### 7. Deploy the Recording Web App (Optional)
+
+The recorder lets you record and upload discussions directly from your phone's browser.
+
+1. In the Apps Script editor, click **Deploy > New deployment**
+2. Select type: **Web app**
+3. Execute as: **Me**
+4. Who has access: **Only myself** (or anyone with a Google account in your org)
+5. Click **Deploy** and copy the URL
+6. On your phone, open the URL in Safari/Chrome and use **Share > Add to Home Screen** for app-like access
 
 ## Usage
 
 ### Recording Discussions
 
+**Option A: Use the Recorder web app (recommended)**
+
+1. Open the Recorder on your phone
+2. Tap the record button and have students introduce themselves at the beginning
+3. Use pause/resume as needed
+4. Tap stop when the discussion ends
+5. Select the section, confirm the date, and tap Upload
+6. The file lands in the Drive upload folder with the correct filename — the processing pipeline takes it from there
+
+**Option B: Manual upload**
+
 1. Record your Harkness discussion on your phone
 2. **Important**: Have students introduce themselves at the beginning ("Hi, I'm [name]")
-3. **Important**: Give verbal feedback at the end of the discussion
-4. Upload the audio file to the "Upload" folder in Google Drive
+3. Upload the audio file to the "Upload" folder in Google Drive
+4. Name the file like `Section 1 - 2024-01-15.m4a` so section and date are auto-detected
 
 ### Processing Workflow
 
-1. **Automatic**: System detects new audio file
-2. **Automatic**: Transcription begins (2-10 minutes depending on length)
-3. **Automatic**: Speakers are identified, summaries generated
-4. **Manual**: Review reports in the StudentReports sheet
-5. **Manual**: Edit grades/feedback as needed
-6. **Manual**: Check the "approved" box for each student
-7. **Manual**: Click "Send Approved Reports" from the menu
+1. **Automatic**: System detects new audio file (checks every 10 minutes)
+2. **Automatic**: ElevenLabs transcribes with speaker diarization (synchronous — no polling needed)
+3. **Automatic**: Gemini identifies speakers from introductions, populates SpeakerMap sheet
+4. **Manual** (individual mode): Review/correct speaker names in the SpeakerMap sheet
+5. **Manual**: Enter grade(s) — one grade on the Discussion row (group mode) or per-student in StudentReports (individual mode)
+6. **Manual**: Click "Generate Feedback" from the menu — Gemini writes feedback
+7. **Manual**: Review/edit feedback, check the approved box(es)
+8. **Manual**: Click "Send Approved Feedback" from the menu
 
 ### Google Sheets Structure
 
-#### Discussions Sheet
-Track each discussion session with status progression:
-`uploaded → transcribing → processing → review → approved → sent`
+| Sheet | Purpose |
+|-------|---------|
+| **Settings** | Key-value global config (mode, distribution flags, grade scale, teacher info) |
+| **Discussions** | One row per discussion session with status, grade, group_feedback, next_step |
+| **Students** | Student roster with email and Canvas IDs |
+| **Transcripts** | Raw/named transcripts, speaker map JSON |
+| **SpeakerMap** | One row per speaker per discussion for teacher review/confirmation |
+| **StudentReports** | Individual student reports with contributions, grades, feedback (individual mode) |
+| **Prompts** | Teacher-editable prompt templates read at runtime |
 
-#### Students Sheet
-Student roster with email and Canvas IDs. Auto-populated from:
-- Speaker identification
-- Canvas course roster (if configured)
+### Two Modes
 
-#### Transcripts Sheet
-Raw and processed transcripts with speaker maps.
+Controlled by the `mode` setting in the Settings sheet:
 
-#### StudentReports Sheet
-Individual student reports with:
-- Participation summary
-- Reflection (from Canvas)
-- Grade (editable)
-- Feedback (editable)
-- Approval checkbox
+- **Group mode** (`group`): One grade and one feedback for the whole class. Stored on the Discussion row. Speaker map auto-confirms.
+- **Individual mode** (`individual`): Per-student grades and feedback. Stored in StudentReports rows. Teacher must confirm speaker map before proceeding.
 
 ## File Naming Convention
 
 For best results, name your audio files like:
-- `Period 3 - 2024-01-15.m4a`
-- `P3_Discussion_20240115.mp3`
-- `Period3.m4a` (date defaults to today)
+- `Section 1 - 2024-01-15.m4a`
+- `S1_Discussion_20240115.mp3`
+- `Section1.m4a` (date defaults to today)
 
 ## Customizing Prompts
 
-All AI prompts are in `Prompts.gs`. You can customize:
+All AI prompts live in the **Prompts sheet**. You can customize:
+- Speaker identification instructions
 - How participation is evaluated
-- What makes a "good" reflection
 - Grading criteria and scale
-- Feedback tone and style
+- Feedback tone and style (default: 2-paragraph critique sandwich)
+
+Edit prompts directly in the sheet — no code changes needed.
 
 ## Estimated Costs
 
 | Service | Cost |
 |---------|------|
-| AssemblyAI | ~$0.37/hour of audio |
+| ElevenLabs | Scribe v2 pricing (check current rates at elevenlabs.io) |
 | Google Gemini | Free tier usually sufficient |
 | Canvas API | Free |
 | Google Apps Script | Free |
-| **Monthly estimate** | **$5-10** (for ~6 hours of discussions) |
 
 ## Troubleshooting
 
@@ -171,27 +202,30 @@ All AI prompts are in `Prompts.gs`. You can customize:
 Run `testConfiguration()` from the script editor to see which API keys are missing.
 
 ### Transcription stuck in "transcribing"
-- Check AssemblyAI dashboard for job status
-- File might be too large (>50MB limit)
-- Audio format might not be supported
+- The system auto-detects stuck transcriptions after 10 minutes and marks them as errors
+- Check the error_message column on the Discussions sheet
+- Try splitting very long audio files into shorter segments
 
 ### Speaker identification wrong
 - Students need clear introductions at the start
-- You can manually edit the `speaker_map` JSON in the Transcripts sheet
+- You can manually edit speaker names in the SpeakerMap sheet
+- Click "Generate Feedback" again after correcting
 
 ### Emails not sending
 - Check students have email addresses in the Students sheet
 - Check Gmail sending limits (500/day for regular accounts)
+- Verify `distribute_email` is set to `true` in Settings
 
 ### Canvas API errors
 - Token might have expired (create a new one)
 - Check CANVAS_BASE_URL doesn't have a trailing slash
-- Verify CANVAS_COURSE_ID is correct
+- Verify canvas_course_id is set in Settings
+- Set canvas_item_type to "assignment" or "discussion" in Settings
 
 ## Privacy & Data
 
-- Audio files are temporarily made public for AssemblyAI to access
-- Permissions are restored after transcription completes
+- Audio files are temporarily made public for ElevenLabs to access (files > 50MB only; smaller files are uploaded directly as blobs)
+- Permissions are automatically restored after transcription completes
 - Transcripts and reports are stored in your Google Sheets (your control)
 - API keys are stored in Script Properties (encrypted by Google)
 

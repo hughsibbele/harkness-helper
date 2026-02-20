@@ -12,13 +12,15 @@ Harkness Discussion Helper is a **Google Apps Script** application that automate
 - **Deployment**: Copy each `src/*.gs` file into the Apps Script editor and update `appsscript.json` via View > Show manifest file.
 - **Testing**: Run functions like `testConfiguration()` or `initialSetup()` directly from the Apps Script editor's function dropdown.
 - **Debugging**: Use `Logger.log()` — output appears in the Apps Script Execution log (View > Executions).
+- **Keep README.md in sync**: When making changes to the codebase (new features, API changes, workflow changes, etc.), update `README.md` to reflect the current state. Do not leave the README stale.
 
 ## Architecture
 
 ### Processing Pipeline
 
 ```
-Audio upload (Drive) → ElevenLabs (transcription + diarization, synchronous)
+Recorder web app (phone) or manual upload → Drive (Upload folder)
+    → ElevenLabs (transcription + diarization, synchronous)
     → Gemini (speaker ID from introductions, auto-suggest)
     → Teacher reviews speaker map in SpeakerMap sheet
     → MODE BRANCH:
@@ -62,6 +64,8 @@ Controlled by `mode` setting in the Settings sheet:
 | `Canvas.gs` | Canvas LMS API: paginated requests, student sync, dual-mode grade posting, course data fetch |
 | `DriveMonitor.gs` | Upload folder monitoring, filename parsing (section + date extraction), folder setup |
 | `Email.gs` | Dual-mode HTML/plaintext email templates, distribution with settings-based channel control |
+| `Webapp.gs` | Web app entry point (`doGet()`), audio upload handler, recorder config endpoint |
+| `RecorderApp.html` | Mobile-first recording UI served by the web app (HTML/CSS/JS, no external deps) |
 
 ### Sheets Structure (7 sheets)
 
@@ -97,4 +101,4 @@ Controlled by `mode` setting in the Settings sheet:
 
 ### Required OAuth Scopes (appsscript.json)
 
-`spreadsheets`, `drive`, `gmail.send`, `script.external_request`, `script.scriptapp`
+`spreadsheets`, `drive`, `gmail.send`, `script.external_request`, `script.scriptapp`, `script.container.ui`
