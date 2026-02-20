@@ -49,13 +49,14 @@ function initializeSheetHeaders(sheet, sheetName) {
       'setting_key', 'setting_value'
     ],
     [CONFIG.SHEETS.DISCUSSIONS]: [
-      'discussion_id', 'date', 'section', 'course', 'audio_file_id',
-      'status', 'next_step', 'grade', 'group_feedback', 'approved',
+      'status', 'next_step', 'date', 'section', 'course',
+      'grade', 'approved', 'group_feedback',
       'canvas_assignment_id', 'canvas_item_type',
-      'error_message', 'created_at', 'updated_at'
+      'discussion_id', 'audio_file_id', 'error_message',
+      'created_at', 'updated_at'
     ],
     [CONFIG.SHEETS.STUDENTS]: [
-      'student_id', 'name', 'email', 'section', 'course', 'canvas_user_id'
+      'name', 'email', 'section', 'course', 'canvas_user_id', 'student_id'
     ],
     [CONFIG.SHEETS.TRANSCRIPTS]: [
       'discussion_id', 'raw_transcript', 'speaker_map', 'named_transcript',
@@ -65,10 +66,9 @@ function initializeSheetHeaders(sheet, sheetName) {
       'discussion_id', 'speaker_label', 'suggested_name', 'student_name', 'confirmed'
     ],
     [CONFIG.SHEETS.STUDENT_REPORTS]: [
-      'report_id', 'discussion_id', 'student_id', 'student_name',
-      'transcript_contributions', 'participation_summary',
-      'grade', 'feedback', 'approved', 'sent',
-      'created_at', 'updated_at'
+      'student_name', 'grade', 'approved', 'sent', 'feedback',
+      'discussion_id', 'transcript_contributions', 'participation_summary',
+      'student_id', 'report_id', 'created_at', 'updated_at'
     ],
     [CONFIG.SHEETS.PROMPTS]: [
       'prompt_name', 'prompt_text'
@@ -797,10 +797,12 @@ function initializeAllSheets() {
 }
 
 /**
- * Add data validation and formatting to sheets
+ * Add data validation, formatting, column widths, and tab ordering to sheets.
+ * Safe to run multiple times — applies formatting idempotently.
  */
 function formatSheets() {
   const ss = getSpreadsheet();
+  const checkboxRule = SpreadsheetApp.newDataValidation().requireCheckbox().build();
 
   // --- Discussions sheet ---
   const discussionsSheet = ss.getSheetByName(CONFIG.SHEETS.DISCUSSIONS);
@@ -813,21 +815,27 @@ function formatSheets() {
         .requireValueInList(statusValues)
         .build();
       discussionsSheet.getRange(2, statusCol, 1000, 1).setDataValidation(rule);
+      // Highlight status column with light blue
+      discussionsSheet.getRange(2, statusCol, 1000, 1).setBackground('#e3f2fd');
+      discussionsSheet.setColumnWidth(statusCol, 100);
     }
 
-    // Approved checkbox (validation only — insertCheckboxes pre-fills FALSE which
-    // makes appendRow skip past 1000 rows)
-    const approvedCol = getColumnIndex(CONFIG.SHEETS.DISCUSSIONS, 'approved');
-    if (approvedCol > 0) {
-      const checkboxRule = SpreadsheetApp.newDataValidation().requireCheckbox().build();
-      discussionsSheet.getRange(2, approvedCol, 1000, 1).setDataValidation(checkboxRule);
-    }
-
-    // Wrap the next_step column so instructions are readable
+    // Next step: wrap, highlight, and widen
     const nextStepCol = getColumnIndex(CONFIG.SHEETS.DISCUSSIONS, 'next_step');
     if (nextStepCol > 0) {
-      discussionsSheet.getRange(2, nextStepCol, 1000, 1).setWrap(true);
-      discussionsSheet.setColumnWidth(nextStepCol, 250);
+      discussionsSheet.getRange(2, nextStepCol, 1000, 1)
+        .setWrap(true)
+        .setBackground('#fff9c4');
+      discussionsSheet.setColumnWidth(nextStepCol, 280);
+    }
+
+    // Freeze status + next_step columns so they're always visible
+    discussionsSheet.setFrozenColumns(2);
+
+    // Approved checkbox
+    const approvedCol = getColumnIndex(CONFIG.SHEETS.DISCUSSIONS, 'approved');
+    if (approvedCol > 0) {
+      discussionsSheet.getRange(2, approvedCol, 1000, 1).setDataValidation(checkboxRule);
     }
 
     // canvas_item_type dropdown
@@ -840,8 +848,31 @@ function formatSheets() {
       discussionsSheet.getRange(2, itemTypeCol, 1000, 1).setDataValidation(itemTypeRule);
     }
 
-    // Conditional formatting: error rows turn red
-    const lastCol = discussionsSheet.getLastColumn();
+    // Column widths for readability
+    const colWidths = {
+      'date': 100, 'section': 100, 'course': 120, 'grade': 65,
+      'approved': 80, 'group_feedback': 300,
+      'canvas_assignment_id': 140, 'canvas_item_type': 120,
+      'discussion_id': 140, 'audio_file_id': 120,
+      'error_message': 200, 'created_at': 140, 'updated_at': 140
+    };
+    for (const [col, width] of Object.entries(colWidths)) {
+      const idx = getColumnIndex(CONFIG.SHEETS.DISCUSSIONS, col);
+      if (idx > 0) discussionsSheet.setColumnWidth(idx, width);
+    }
+
+    // Wrap group_feedback and error_message
+    const feedbackCol = getColumnIndex(CONFIG.SHEETS.DISCUSSIONS, 'group_feedback');
+    if (feedbackCol > 0) {
+      discussionsSheet.getRange(2, feedbackCol, 1000, 1).setWrap(true);
+    }
+    const errorCol = getColumnIndex(CONFIG.SHEETS.DISCUSSIONS, 'error_message');
+    if (errorCol > 0) {
+      discussionsSheet.getRange(2, errorCol, 1000, 1).setWrap(true);
+    }
+
+    // Conditional formatting: error rows red, sent rows green
+    const lastCol = Math.max(discussionsSheet.getLastColumn(), 1);
     if (statusCol > 0) {
       const errorRule = SpreadsheetApp.newConditionalFormatRule()
         .whenTextEqualTo(CONFIG.STATUS.ERROR)
@@ -855,6 +886,22 @@ function formatSheets() {
         .build();
       discussionsSheet.setConditionalFormatRules([errorRule, sentRule]);
     }
+
+    discussionsSheet.setTabColor('#4285f4');
+  }
+
+  // --- Students sheet ---
+  const studentsSheet = ss.getSheetByName(CONFIG.SHEETS.STUDENTS);
+  if (studentsSheet) {
+    const studentColWidths = {
+      'name': 160, 'email': 200, 'section': 100,
+      'course': 120, 'canvas_user_id': 110, 'student_id': 140
+    };
+    for (const [col, width] of Object.entries(studentColWidths)) {
+      const idx = getColumnIndex(CONFIG.SHEETS.STUDENTS, col);
+      if (idx > 0) studentsSheet.setColumnWidth(idx, width);
+    }
+    studentsSheet.setTabColor('#34a853');
   }
 
   // --- SpeakerMap sheet ---
@@ -862,9 +909,9 @@ function formatSheets() {
   if (speakerMapSheet) {
     const confirmedCol = getColumnIndex(CONFIG.SHEETS.SPEAKER_MAP, 'confirmed');
     if (confirmedCol > 0) {
-      const checkboxRule = SpreadsheetApp.newDataValidation().requireCheckbox().build();
       speakerMapSheet.getRange(2, confirmedCol, 1000, 1).setDataValidation(checkboxRule);
     }
+    speakerMapSheet.setTabColor('#ff9800');
   }
 
   // --- StudentReports sheet ---
@@ -874,14 +921,86 @@ function formatSheets() {
     const sentCol = getColumnIndex(CONFIG.SHEETS.STUDENT_REPORTS, 'sent');
 
     if (approvedCol > 0) {
-      const checkboxRule = SpreadsheetApp.newDataValidation().requireCheckbox().build();
       reportsSheet.getRange(2, approvedCol, 1000, 1).setDataValidation(checkboxRule);
     }
     if (sentCol > 0) {
-      const checkboxRule = SpreadsheetApp.newDataValidation().requireCheckbox().build();
       reportsSheet.getRange(2, sentCol, 1000, 1).setDataValidation(checkboxRule);
     }
+
+    // Column widths
+    const reportColWidths = {
+      'student_name': 140, 'grade': 65, 'approved': 80, 'sent': 60,
+      'feedback': 300, 'discussion_id': 140,
+      'transcript_contributions': 250, 'participation_summary': 200
+    };
+    for (const [col, width] of Object.entries(reportColWidths)) {
+      const idx = getColumnIndex(CONFIG.SHEETS.STUDENT_REPORTS, col);
+      if (idx > 0) reportsSheet.setColumnWidth(idx, width);
+    }
+
+    // Wrap feedback and contributions
+    const feedbackCol = getColumnIndex(CONFIG.SHEETS.STUDENT_REPORTS, 'feedback');
+    if (feedbackCol > 0) {
+      reportsSheet.getRange(2, feedbackCol, 1000, 1).setWrap(true);
+    }
+    const contribCol = getColumnIndex(CONFIG.SHEETS.STUDENT_REPORTS, 'transcript_contributions');
+    if (contribCol > 0) {
+      reportsSheet.getRange(2, contribCol, 1000, 1).setWrap(true);
+    }
+
+    reportsSheet.setTabColor('#9c27b0');
   }
+
+  // --- Transcripts sheet ---
+  const transcriptsSheet = ss.getSheetByName(CONFIG.SHEETS.TRANSCRIPTS);
+  if (transcriptsSheet) {
+    transcriptsSheet.setTabColor('#9e9e9e');
+  }
+
+  // --- Courses sheet ---
+  const coursesSheet = ss.getSheetByName(CONFIG.SHEETS.COURSES);
+  if (coursesSheet) {
+    coursesSheet.setTabColor('#00acc1');
+  }
+
+  // --- Prompts sheet ---
+  const promptsSheet = ss.getSheetByName(CONFIG.SHEETS.PROMPTS);
+  if (promptsSheet) {
+    promptsSheet.setTabColor('#fdd835');
+    const textCol = getColumnIndex(CONFIG.SHEETS.PROMPTS, 'prompt_text');
+    if (textCol > 0) {
+      promptsSheet.getRange(2, textCol, 100, 1).setWrap(true);
+      promptsSheet.setColumnWidth(textCol, 600);
+    }
+  }
+
+  // --- Settings sheet ---
+  const settingsSheet = ss.getSheetByName(CONFIG.SHEETS.SETTINGS);
+  if (settingsSheet) {
+    settingsSheet.setTabColor('#9e9e9e');
+  }
+
+  // --- Tab ordering (teacher-facing first, config last) ---
+  const tabOrder = [
+    CONFIG.SHEETS.DISCUSSIONS,
+    CONFIG.SHEETS.STUDENTS,
+    CONFIG.SHEETS.SPEAKER_MAP,
+    CONFIG.SHEETS.STUDENT_REPORTS,
+    CONFIG.SHEETS.TRANSCRIPTS,
+    CONFIG.SHEETS.COURSES,
+    CONFIG.SHEETS.PROMPTS,
+    CONFIG.SHEETS.SETTINGS
+  ];
+  for (let i = 0; i < tabOrder.length; i++) {
+    const sheet = ss.getSheetByName(tabOrder[i]);
+    if (sheet) {
+      sheet.activate();
+      ss.moveActiveSheet(i + 1);
+    }
+  }
+  // Return to Discussions tab
+  const discTab = ss.getSheetByName(CONFIG.SHEETS.DISCUSSIONS);
+  if (discTab) discTab.activate();
 
   Logger.log('Sheet formatting applied.');
 }
