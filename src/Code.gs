@@ -55,6 +55,7 @@ function onOpen() {
   }
 
   menu.addSeparator()
+    .addItem('Reorder & Format Sheets', 'menuReorderColumns')
     .addItem('Setup Automatic Triggers', 'setupTriggers')
     .addItem('Remove All Triggers', 'removeAllTriggers');
 
@@ -845,6 +846,30 @@ function menuEnableMultiCourse() {
       '3. Add additional courses with their Canvas course IDs\n' +
       '4. Run "Sync Canvas Roster" for each course',
       ui.ButtonSet.OK);
+  } catch (e) {
+    ui.alert('Error', e.message, ui.ButtonSet.OK);
+  }
+}
+
+/**
+ * Reorder columns in all sheets to the canonical order and re-apply formatting
+ */
+function menuReorderColumns() {
+  const ui = SpreadsheetApp.getUi();
+
+  const confirm = ui.alert('Reorder & Format Sheets',
+    'This will:\n' +
+    '1. Reorder columns to put teacher-facing columns first\n' +
+    '2. Apply highlighting, column widths, and text wrapping\n' +
+    '3. Set tab colors and logical tab order\n\n' +
+    'Your data will be preserved — only column positions change. Continue?',
+    ui.ButtonSet.YES_NO);
+
+  if (confirm !== ui.Button.YES) return;
+
+  try {
+    reorderColumns();
+    ui.alert('Done', 'Columns reordered and formatting applied.', ui.ButtonSet.OK);
   } catch (e) {
     ui.alert('Error', e.message, ui.ButtonSet.OK);
   }

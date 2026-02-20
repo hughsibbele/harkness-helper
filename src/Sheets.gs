@@ -797,6 +797,105 @@ function initializeAllSheets() {
 }
 
 /**
+ * Reorder columns in existing sheets to match the canonical header order
+ * defined in initializeSheetHeaders(). Moves data along with headers.
+ * Safe to run multiple times — no-ops if columns already in order.
+ * Sheets with no data rows are skipped (headers-only sheets are rewritten in place).
+ */
+function reorderColumns() {
+  const ss = getSpreadsheet();
+
+  // Canonical header order (must match initializeSheetHeaders)
+  const canonicalHeaders = {
+    [CONFIG.SHEETS.DISCUSSIONS]: [
+      'status', 'next_step', 'date', 'section', 'course',
+      'grade', 'approved', 'group_feedback',
+      'canvas_assignment_id', 'canvas_item_type',
+      'discussion_id', 'audio_file_id', 'error_message',
+      'created_at', 'updated_at'
+    ],
+    [CONFIG.SHEETS.STUDENTS]: [
+      'name', 'email', 'section', 'course', 'canvas_user_id', 'student_id'
+    ],
+    [CONFIG.SHEETS.STUDENT_REPORTS]: [
+      'student_name', 'grade', 'approved', 'sent', 'feedback',
+      'discussion_id', 'transcript_contributions', 'participation_summary',
+      'student_id', 'report_id', 'created_at', 'updated_at'
+    ],
+    [CONFIG.SHEETS.SPEAKER_MAP]: [
+      'discussion_id', 'speaker_label', 'suggested_name', 'student_name', 'confirmed'
+    ],
+    [CONFIG.SHEETS.TRANSCRIPTS]: [
+      'discussion_id', 'raw_transcript', 'speaker_map', 'named_transcript',
+      'created_at', 'updated_at'
+    ]
+  };
+
+  for (const [sheetName, targetOrder] of Object.entries(canonicalHeaders)) {
+    const sheet = ss.getSheetByName(sheetName);
+    if (!sheet) continue;
+
+    const lastRow = sheet.getLastRow();
+    const lastCol = sheet.getLastColumn();
+    if (lastCol === 0) continue;
+
+    // Read current headers
+    const currentHeaders = sheet.getRange(1, 1, 1, lastCol).getValues()[0].map(String);
+
+    // Build column mapping: for each target column, find its current position
+    const colMap = [];  // array of current column indices (0-based) in target order
+    for (const header of targetOrder) {
+      const idx = currentHeaders.indexOf(header);
+      if (idx >= 0) {
+        colMap.push(idx);
+      }
+    }
+    // Append any extra columns not in the canonical order (preserves unknown columns)
+    for (let i = 0; i < currentHeaders.length; i++) {
+      if (!colMap.includes(i)) {
+        colMap.push(i);
+      }
+    }
+
+    // Check if already in order
+    const alreadyOrdered = colMap.every((val, i) => val === i);
+    if (alreadyOrdered) {
+      Logger.log(`${sheetName}: columns already in order, skipping.`);
+      continue;
+    }
+
+    // Read all data (headers + rows)
+    const allData = lastRow > 0
+      ? sheet.getRange(1, 1, lastRow, lastCol).getValues()
+      : [];
+
+    // Reorder each row according to colMap
+    const reordered = allData.map(row => colMap.map(idx => row[idx]));
+
+    // Write back
+    sheet.clear();
+    if (reordered.length > 0) {
+      sheet.getRange(1, 1, reordered.length, reordered[0].length).setValues(reordered);
+    }
+
+    // Re-apply header formatting
+    const numCols = reordered[0] ? reordered[0].length : targetOrder.length;
+    sheet.setFrozenRows(1);
+    sheet.getRange(1, 1, 1, numCols)
+      .setFontWeight('bold')
+      .setBackground('#4285f4')
+      .setFontColor('white');
+
+    Logger.log(`${sheetName}: columns reordered successfully.`);
+  }
+
+  // Re-apply all formatting (widths, highlighting, validation, etc.)
+  formatSheets();
+
+  Logger.log('Column reordering complete.');
+}
+
+/**
  * Add data validation, formatting, column widths, and tab ordering to sheets.
  * Safe to run multiple times — applies formatting idempotently.
  */
