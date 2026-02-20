@@ -156,12 +156,13 @@ The recorder lets you record and upload discussions directly from your phone's b
 | Sheet | Purpose |
 |-------|---------|
 | **Settings** | Key-value global config (mode, distribution flags, grade scale, teacher info) |
-| **Discussions** | One row per discussion session with status, grade, group_feedback, next_step |
-| **Students** | Student roster with email and Canvas IDs |
+| **Discussions** | One row per discussion session with status, grade, group_feedback, next_step, course |
+| **Students** | Student roster with email, Canvas IDs, and course assignment |
 | **Transcripts** | Raw/named transcripts, speaker map JSON |
 | **SpeakerMap** | One row per speaker per discussion for teacher review/confirmation |
 | **StudentReports** | Individual student reports with contributions, grades, feedback (individual mode) |
 | **Prompts** | Teacher-editable prompt templates read at runtime |
+| **Courses** | Multi-course lookup table (optional): course_name, canvas_course_id, overrides |
 
 ### Two Modes
 
@@ -170,12 +171,42 @@ Controlled by the `mode` setting in the Settings sheet:
 - **Group mode** (`group`): One grade and one feedback for the whole class. Stored on the Discussion row. Speaker map auto-confirms.
 - **Individual mode** (`individual`): Per-student grades and feedback. Stored in StudentReports rows. Teacher must confirm speaker map before proceeding.
 
+### Multi-Course Support
+
+If you teach multiple courses (e.g., AP English and World History), you can manage them all from one spreadsheet.
+
+**Setup:**
+1. Click **Enable Multi-Course** from the Harkness Helper menu
+2. This creates a **Courses** sheet and adds a `course` column to Discussions and Students
+3. Rename "My Course" to your actual course name, add additional courses with their Canvas course IDs
+4. Run **Sync Canvas Roster** for each course (or **Sync All Course Rosters** to sync all at once)
+
+**Courses sheet columns:**
+| Column | Purpose |
+|--------|---------|
+| `course_name` | Friendly name (e.g., "AP English") |
+| `canvas_course_id` | The Canvas course ID for this course |
+| `canvas_base_url` | Optional override (falls back to global Settings) |
+| `canvas_item_type` | Optional override: "assignment" or "discussion" |
+
+**How it works:**
+- Each Discussion and Student row has a `course` column linking to the Courses sheet
+- Grade posting, roster sync, and email distribution are course-aware
+- The Recorder web app shows a course picker when multi-course mode is enabled
+- Filenames include the course name: `AP English - Section 1 - 2025-02-20.webm`
+- If a discussion's `course` column is empty, the system falls back to the global `canvas_course_id` in Settings
+
+**Backward compatible:** If you don't enable multi-course, everything works exactly as before.
+
 ## File Naming Convention
 
 For best results, name your audio files like:
 - `Section 1 - 2024-01-15.m4a`
 - `S1_Discussion_20240115.mp3`
 - `Section1.m4a` (date defaults to today)
+
+Multi-course format (course name prefix is auto-detected):
+- `AP English - Section 1 - 2024-01-15.m4a`
 
 ## Customizing Prompts
 

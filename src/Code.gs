@@ -23,7 +23,7 @@
 function onOpen() {
   const ui = SpreadsheetApp.getUi();
 
-  ui.createMenu('Harkness Helper')
+  const menu = ui.createMenu('Harkness Helper')
     .addItem('Setup Folders', 'setupDriveFolders')
     .addItem('Initialize Sheets', 'initializeAllSheets')
     .addItem('Check Configuration', 'showConfigStatus')
@@ -33,11 +33,22 @@ function onOpen() {
     .addItem('Send Approved Feedback', 'menuSendApprovedFeedback')
     .addSeparator()
     .addItem('Sync Canvas Roster', 'menuSyncCanvasRoster')
-    .addItem('Fetch Canvas Course Data', 'menuFetchCanvasCourseData')
-    .addSeparator()
+    .addItem('Fetch Canvas Course Data', 'menuFetchCanvasCourseData');
+
+  if (isMultiCourseMode()) {
+    menu.addItem('Sync All Course Rosters', 'menuSyncAllCourseRosters');
+  }
+
+  menu.addSeparator()
     .addItem('Setup Automatic Triggers', 'setupTriggers')
-    .addItem('Remove All Triggers', 'removeAllTriggers')
-    .addToUi();
+    .addItem('Remove All Triggers', 'removeAllTriggers');
+
+  if (!isMultiCourseMode()) {
+    menu.addSeparator()
+      .addItem('Enable Multi-Course', 'menuEnableMultiCourse');
+  }
+
+  menu.addToUi();
 }
 
 /**
@@ -53,7 +64,18 @@ function showConfigStatus() {
     message += 'Mode: ' + getMode() + '\n';
     message += 'Email distribution: ' + getSetting('distribute_email') + '\n';
     message += 'Canvas distribution: ' + getSetting('distribute_canvas') + '\n';
-    message += 'Canvas integration: ' + (isCanvasConfigured() ? 'Configured' : 'Not configured');
+    message += 'Canvas integration: ' + (isCanvasConfigured() ? 'Configured' : 'Not configured') + '\n';
+    if (isMultiCourseMode()) {
+      const courses = getAllCourses();
+      message += '\nMulti-course mode: ENABLED (' + courses.length + ' course' + (courses.length !== 1 ? 's' : '') + ')\n';
+      courses.forEach(c => {
+        message += '  - ' + c.course_name + ' (ID: ' + c.canvas_course_id + ')\n';
+      });
+    } else {
+      message += '\nMulti-course mode: disabled (single-course)\n';
+      const courseId = getSetting('canvas_course_id');
+      if (courseId) message += 'Canvas course ID: ' + courseId + '\n';
+    }
   } else {
     message = 'Missing required configuration:\n\n';
     message += validation.missing.map(k => '- ' + k).join('\n');
@@ -238,13 +260,15 @@ function createStudentReportsFromSpeakerMap(discussionId) {
 
   for (const studentName of studentNames) {
     // Find or create student record
-    let student = getStudentByName(studentName, discussion.section);
+    let student = getStudentByName(studentName, discussion.section, discussion.course || null);
     if (!student) {
-      const studentId = upsertStudent({
+      const studentData = {
         name: studentName,
         email: '',
         section: discussion.section || ''
-      });
+      };
+      if (discussion.course) studentData.course = discussion.course;
+      const studentId = upsertStudent(studentData);
       student = { student_id: studentId };
     }
 
@@ -541,6 +565,44 @@ function menuSyncCanvasRoster() {
     return;
   }
 
+  // Multi-course mode: prompt teacher to pick a course
+  if (isMultiCourseMode()) {
+    const courses = getAllCourses();
+    const courseNames = courses.map(c => c.course_name);
+    const response = ui.prompt('Select Course',
+      'Which course roster to sync?\n\nAvailable courses: ' + courseNames.join(', ') +
+      '\n\nEnter course name:',
+      ui.ButtonSet.OK_CANCEL);
+    if (response.getSelectedButton() !== ui.Button.OK) return;
+
+    const selectedName = response.getResponseText().trim();
+    const course = getCourseByName(selectedName);
+    if (!course) {
+      ui.alert('Error', 'Course "' + selectedName + '" not found on the Courses sheet.', ui.ButtonSet.OK);
+      return;
+    }
+
+    try {
+      const courseId = String(course.canvas_course_id);
+      const sections = getCanvasSections(courseId);
+      const sectionMap = {};
+      for (const section of sections) {
+        sectionMap[section.id] = section.name;
+      }
+      const fallbackSection = sections.length === 1 ? sections[0].name : '';
+      const count = syncCanvasStudents(courseId, fallbackSection, sectionMap, selectedName);
+
+      let message = `Synced ${count} students for "${selectedName}".\n\n`;
+      message += `Sections found: ${sections.map(s => s.name).join(', ')}\n`;
+      message += 'Students tagged with course "' + selectedName + '".';
+      ui.alert('Roster Synced', message, ui.ButtonSet.OK);
+    } catch (e) {
+      ui.alert('Error', e.message, ui.ButtonSet.OK);
+    }
+    return;
+  }
+
+  // Single-course mode: existing behavior
   const courseId = getSetting('canvas_course_id');
   if (!courseId) {
     ui.alert('No Course ID',
@@ -550,7 +612,6 @@ function menuSyncCanvasRoster() {
   }
 
   try {
-    // Fetch sections to auto-assign students
     const sections = getCanvasSections(courseId);
     const sectionMap = {};
     for (const section of sections) {
@@ -579,18 +640,61 @@ function menuFetchCanvasCourseData() {
     return;
   }
 
-  let courseId = getSetting('canvas_course_id');
-  if (!courseId) {
-    const response = ui.prompt('Canvas Course ID',
-      'Enter the Canvas course ID:',
+  let courseId;
+  let courseName = null;
+
+  if (isMultiCourseMode()) {
+    // Multi-course mode: prompt to pick or enter a course
+    const courses = getAllCourses();
+    const courseNames = courses.map(c => c.course_name);
+    const response = ui.prompt('Select Course',
+      'Which course to fetch data for?\n\nAvailable courses: ' + courseNames.join(', ') +
+      '\n\nEnter course name (or enter a Canvas course ID to add a new course):',
       ui.ButtonSet.OK_CANCEL);
     if (response.getSelectedButton() !== ui.Button.OK) return;
-    courseId = response.getResponseText().trim();
-    setSetting('canvas_course_id', courseId);
+
+    const input = response.getResponseText().trim();
+    const existingCourse = getCourseByName(input);
+
+    if (existingCourse) {
+      courseId = String(existingCourse.canvas_course_id);
+      courseName = existingCourse.course_name;
+    } else if (/^\d+$/.test(input)) {
+      // Looks like a course ID — offer to add it
+      courseId = input;
+      const addResponse = ui.prompt('Add Course',
+        'Course ID ' + courseId + ' is not in the Courses sheet yet.\n\nEnter a friendly name for this course (e.g., "AP English"):',
+        ui.ButtonSet.OK_CANCEL);
+      if (addResponse.getSelectedButton() === ui.Button.OK) {
+        courseName = addResponse.getResponseText().trim();
+        if (courseName) {
+          insertRow(CONFIG.SHEETS.COURSES, {
+            course_name: courseName,
+            canvas_course_id: courseId,
+            canvas_base_url: '',
+            canvas_item_type: ''
+          });
+        }
+      }
+    } else {
+      ui.alert('Error', 'Course "' + input + '" not found on the Courses sheet.', ui.ButtonSet.OK);
+      return;
+    }
+  } else {
+    // Single-course mode: existing behavior
+    courseId = getSetting('canvas_course_id');
+    if (!courseId) {
+      const response = ui.prompt('Canvas Course ID',
+        'Enter the Canvas course ID:',
+        ui.ButtonSet.OK_CANCEL);
+      if (response.getSelectedButton() !== ui.Button.OK) return;
+      courseId = response.getResponseText().trim();
+      setSetting('canvas_course_id', courseId);
+    }
   }
 
   try {
-    const result = fetchCanvasCourseData(courseId);
+    const result = fetchCanvasCourseData(courseId, courseName);
 
     // Build info for dialog
     let info = '';
@@ -651,6 +755,81 @@ function menuFetchCanvasCourseData() {
     ).setWidth(700).setHeight(600);
 
     ui.showModalDialog(html, 'Canvas Course Data');
+  } catch (e) {
+    ui.alert('Error', e.message, ui.ButtonSet.OK);
+  }
+}
+
+/**
+ * Sync rosters for all courses in the Courses sheet
+ */
+function menuSyncAllCourseRosters() {
+  const ui = SpreadsheetApp.getUi();
+
+  if (!isCanvasConfigured()) {
+    ui.alert('Canvas Not Configured',
+      'Please add CANVAS_API_TOKEN and CANVAS_BASE_URL to Script Properties.',
+      ui.ButtonSet.OK);
+    return;
+  }
+
+  const courses = getAllCourses();
+  if (courses.length === 0) {
+    ui.alert('No Courses', 'No courses found on the Courses sheet.', ui.ButtonSet.OK);
+    return;
+  }
+
+  try {
+    let totalStudents = 0;
+    const results = [];
+
+    for (const course of courses) {
+      const courseId = String(course.canvas_course_id);
+      const sections = getCanvasSections(courseId);
+      const sectionMap = {};
+      for (const section of sections) {
+        sectionMap[section.id] = section.name;
+      }
+      const fallbackSection = sections.length === 1 ? sections[0].name : '';
+      const count = syncCanvasStudents(courseId, fallbackSection, sectionMap, course.course_name);
+      totalStudents += count;
+      results.push(`${course.course_name}: ${count} students`);
+    }
+
+    let message = `Synced ${totalStudents} students across ${courses.length} courses:\n\n`;
+    message += results.join('\n');
+    ui.alert('All Rosters Synced', message, ui.ButtonSet.OK);
+  } catch (e) {
+    ui.alert('Error', e.message, ui.ButtonSet.OK);
+  }
+}
+
+/**
+ * Enable multi-course mode by running the migration
+ */
+function menuEnableMultiCourse() {
+  const ui = SpreadsheetApp.getUi();
+
+  const confirm = ui.alert('Enable Multi-Course',
+    'This will:\n' +
+    '1. Add a "course" column to Discussions and Students sheets\n' +
+    '2. Create a Courses sheet\n' +
+    '3. Pre-populate with your current canvas_course_id (if set)\n\n' +
+    'Your existing data will not be affected. Continue?',
+    ui.ButtonSet.YES_NO);
+
+  if (confirm !== ui.Button.YES) return;
+
+  try {
+    migrateToMultiCourse();
+    ui.alert('Multi-Course Enabled',
+      'Migration complete!\n\n' +
+      'Next steps:\n' +
+      '1. Go to the Courses sheet\n' +
+      '2. Rename "My Course" to your actual course name\n' +
+      '3. Add additional courses with their Canvas course IDs\n' +
+      '4. Run "Sync Canvas Roster" for each course',
+      ui.ButtonSet.OK);
   } catch (e) {
     ui.alert('Error', e.message, ui.ButtonSet.OK);
   }
@@ -752,12 +931,16 @@ function testConfiguration() {
   // Test Canvas (if configured)
   if (isCanvasConfigured()) {
     try {
-      const courseId = getSetting('canvas_course_id');
+      let courseId = getSetting('canvas_course_id');
+      if (!courseId && isMultiCourseMode()) {
+        const courses = getAllCourses();
+        if (courses.length > 0) courseId = String(courses[0].canvas_course_id);
+      }
       if (courseId) {
         canvasRequest(`/courses/${courseId}`);
-        results.push('Canvas API: working');
+        results.push('Canvas API: working' + (isMultiCourseMode() ? ' (multi-course)' : ''));
       } else {
-        results.push('Canvas: Course ID not set in Settings');
+        results.push('Canvas: Course ID not set in Settings or Courses sheet');
       }
     } catch (e) {
       results.push('Canvas: ' + e.message);

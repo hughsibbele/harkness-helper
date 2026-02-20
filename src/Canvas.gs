@@ -140,9 +140,10 @@ function getCanvasStudents(courseId) {
  * @param {string} courseId
  * @param {string} fallbackSection - Section name to use if section can't be determined
  * @param {Object} sectionMap - Optional map of Canvas section IDs to section names
+ * @param {string} courseName - Optional course name to tag students with (multi-course mode)
  * @returns {number} Number of students synced
  */
-function syncCanvasStudents(courseId, fallbackSection, sectionMap = null) {
+function syncCanvasStudents(courseId, fallbackSection, sectionMap = null, courseName = null) {
   const canvasStudents = getCanvasStudents(courseId);
 
   for (const student of canvasStudents) {
@@ -152,12 +153,17 @@ function syncCanvasStudents(courseId, fallbackSection, sectionMap = null) {
       section = sectionMap[student.sectionId];
     }
 
-    upsertStudent({
+    const studentData = {
       name: student.name,
       email: student.email,
       section: section,
       canvas_user_id: student.canvasUserId.toString()
-    });
+    };
+    if (courseName) {
+      studentData.course = courseName;
+    }
+
+    upsertStudent(studentData);
   }
 
   Logger.log(`Synced ${canvasStudents.length} students from Canvas course ${courseId}`);
@@ -192,18 +198,13 @@ function stripHtml(html) {
 
 /**
  * Get the effective Canvas item type for a discussion.
- * Per-discussion override takes precedence over global setting.
+ * 3-tier fallback: per-discussion → per-course → global setting.
  *
  * @param {Object} discussion - Discussion row object
  * @returns {string} 'assignment' or 'discussion'
  */
 function getCanvasItemType(discussion) {
-  const perDiscussion = discussion.canvas_item_type;
-  if (perDiscussion === 'assignment' || perDiscussion === 'discussion') {
-    return perDiscussion;
-  }
-  const global = getSetting('canvas_item_type');
-  return global === 'discussion' ? 'discussion' : 'assignment';
+  return getCanvasItemTypeForDiscussion(discussion);
 }
 
 /**
@@ -288,10 +289,7 @@ function postGradesForDiscussion(discussionId) {
   }
   const canvasItemId = discussion.canvas_assignment_id;
 
-  const courseId = getSetting('canvas_course_id');
-  if (!courseId) {
-    throw new Error('Canvas course ID not set in Settings');
-  }
+  const courseId = getCanvasCourseIdForDiscussion(discussion);
 
   // Resolve item ID: if type is 'discussion', look up the linked assignment_id
   const itemType = getCanvasItemType(discussion);
@@ -309,7 +307,7 @@ function postGradesForDiscussion(discussionId) {
     }
 
     const students = discussion.section
-      ? getStudentsBySection(discussion.section)
+      ? getStudentsBySectionAndCourse(discussion.section, discussion.course || null)
       : getAllRows(CONFIG.SHEETS.STUDENTS);
 
     for (const student of students) {
@@ -372,9 +370,10 @@ function postGradesForDiscussion(discussionId) {
  * and returns assignment + section info for teacher reference.
  *
  * @param {string} courseId
+ * @param {string} courseName - Optional course name to tag students with (multi-course mode)
  * @returns {Object} {courseName, sections, studentCount, assignments, discussionTopics}
  */
-function fetchCanvasCourseData(courseId) {
+function fetchCanvasCourseData(courseId, courseName = null) {
   // Fetch course info
   const course = canvasRequest(`/courses/${courseId}`);
   Logger.log(`Fetching data for course: ${course.name}`);
@@ -389,7 +388,7 @@ function fetchCanvasCourseData(courseId) {
 
   // Sync students with auto-section assignment
   const fallbackSection = sections.length === 1 ? sections[0].name : course.name;
-  const studentCount = syncCanvasStudents(courseId, fallbackSection, sectionMap);
+  const studentCount = syncCanvasStudents(courseId, fallbackSection, sectionMap, courseName);
 
   // Fetch assignments
   const assignments = canvasRequestPaginated(`/courses/${courseId}/assignments?order_by=due_at`);

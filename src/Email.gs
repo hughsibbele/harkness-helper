@@ -279,7 +279,7 @@ function sendAllReportsForDiscussion(discussionId) {
   if (isGroupMode()) {
     // Group mode: send same email to all students in the class
     const students = discussion.section
-      ? getStudentsBySection(discussion.section)
+      ? getStudentsBySectionAndCourse(discussion.section, discussion.course || null)
       : getAllRows(CONFIG.SHEETS.STUDENTS);
 
     for (const student of students) {
@@ -357,7 +357,7 @@ function previewEmails(discussionId) {
 
   if (isGroupMode()) {
     const students = discussion.section
-      ? getStudentsBySection(discussion.section)
+      ? getStudentsBySectionAndCourse(discussion.section, discussion.course || null)
       : getAllRows(CONFIG.SHEETS.STUDENTS);
 
     return students.map(s => ({

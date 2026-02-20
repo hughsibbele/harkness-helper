@@ -20,7 +20,8 @@ const CONFIG = {
     TRANSCRIPTS: 'Transcripts',
     SPEAKER_MAP: 'SpeakerMap',
     STUDENT_REPORTS: 'StudentReports',
-    PROMPTS: 'Prompts'
+    PROMPTS: 'Prompts',
+    COURSES: 'Courses'
   },
 
   // Discussion status values

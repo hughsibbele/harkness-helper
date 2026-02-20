@@ -173,6 +173,36 @@
       margin-bottom: 8px;
     }
 
+    .course-group {
+      display: none;
+    }
+
+    .course-group.visible { display: block; }
+
+    .course-buttons {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .course-btn {
+      padding: 10px 20px;
+      border-radius: 20px;
+      border: 2px solid #d1d1d6;
+      background: white;
+      font-size: 15px;
+      cursor: pointer;
+      transition: all 0.15s;
+      color: #1d1d1f;
+    }
+
+    .course-btn:active { transform: scale(0.96); }
+    .course-btn.selected {
+      border-color: #34c759;
+      background: #34c759;
+      color: white;
+    }
+
     .section-buttons {
       display: flex;
       flex-wrap: wrap;
@@ -352,6 +382,13 @@
 
   <!-- Details form (after recording) -->
   <div id="form" class="form">
+    <div id="course-group" class="form-group course-group">
+      <label>Course</label>
+      <div id="course-buttons" class="course-buttons">
+        <!-- Populated dynamically -->
+      </div>
+    </div>
+
     <div class="form-group">
       <label>Section</label>
       <div id="section-buttons" class="section-buttons">
@@ -405,6 +442,10 @@
     var wakeLock = null;
     var sections = [];
     var selectedSection = '';
+    var multiCourse = false;
+    var courses = [];
+    var coursesSections = {};
+    var selectedCourse = '';
 
     // =====================================================================
     // INITIALIZATION
@@ -413,11 +454,18 @@
     // Set date to today
     document.getElementById('input-date').value = new Date().toISOString().split('T')[0];
 
-    // Load sections from server
+    // Load sections and courses from server
     google.script.run
       .withSuccessHandler(function(config) {
         sections = config.sections || [];
+        multiCourse = config.multiCourse || false;
+        courses = config.courses || [];
+        coursesSections = config.coursesSections || {};
         buildSectionButtons();
+        if (multiCourse && courses.length > 0) {
+          buildCourseButtons();
+          document.getElementById('course-group').classList.add('visible');
+        }
       })
       .withFailureHandler(function() {
         buildSectionButtons();
@@ -463,6 +511,42 @@
         document.getElementById('custom-section').classList.remove('visible');
         selectedSection = value;
       }
+    }
+
+    function buildCourseButtons() {
+      var container = document.getElementById('course-buttons');
+      container.innerHTML = '';
+
+      for (var i = 0; i < courses.length; i++) {
+        var btn = document.createElement('button');
+        btn.className = 'course-btn';
+        btn.textContent = courses[i];
+        btn.setAttribute('data-course', courses[i]);
+        btn.onclick = function() { selectCourse(this); };
+        container.appendChild(btn);
+      }
+    }
+
+    function selectCourse(btn) {
+      // Deselect all course buttons
+      var buttons = document.querySelectorAll('.course-btn');
+      for (var i = 0; i < buttons.length; i++) {
+        buttons[i].classList.remove('selected');
+      }
+      btn.classList.add('selected');
+
+      selectedCourse = btn.getAttribute('data-course');
+
+      // Filter sections to this course's sections
+      var courseSections = coursesSections[selectedCourse] || [];
+      if (courseSections.length > 0) {
+        sections = courseSections;
+      }
+      // Reset section selection and rebuild buttons
+      selectedSection = '';
+      document.getElementById('custom-section').classList.remove('visible');
+      document.getElementById('input-custom-section').value = '';
+      buildSectionButtons();
     }
 
     // =====================================================================
@@ -585,7 +669,9 @@
       }
 
       var ext = getExtension(mimeType);
-      var fileName = section + ' - ' + date + ext;
+      var fileName = multiCourse && selectedCourse
+        ? selectedCourse + ' - ' + section + ' - ' + date + ext
+        : section + ' - ' + date + ext;
 
       showState('uploading');
 
@@ -700,8 +786,15 @@
       audioBlob = null;
       audioChunks = [];
       selectedSection = '';
+      selectedCourse = '';
       elapsedSeconds = 0;
       updateTimerDisplay();
+
+      // Reset course selection
+      var courseButtons = document.querySelectorAll('.course-btn');
+      for (var i = 0; i < courseButtons.length; i++) {
+        courseButtons[i].classList.remove('selected');
+      }
 
       // Reset section selection
       var buttons = document.querySelectorAll('.section-btn');

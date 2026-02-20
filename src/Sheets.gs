@@ -49,13 +49,13 @@ function initializeSheetHeaders(sheet, sheetName) {
       'setting_key', 'setting_value'
     ],
     [CONFIG.SHEETS.DISCUSSIONS]: [
-      'discussion_id', 'date', 'section', 'audio_file_id',
+      'discussion_id', 'date', 'section', 'course', 'audio_file_id',
       'status', 'next_step', 'grade', 'group_feedback', 'approved',
       'canvas_assignment_id', 'canvas_item_type',
       'error_message', 'created_at', 'updated_at'
     ],
     [CONFIG.SHEETS.STUDENTS]: [
-      'student_id', 'name', 'email', 'section', 'canvas_user_id'
+      'student_id', 'name', 'email', 'section', 'course', 'canvas_user_id'
     ],
     [CONFIG.SHEETS.TRANSCRIPTS]: [
       'discussion_id', 'raw_transcript', 'speaker_map', 'named_transcript',
@@ -72,6 +72,9 @@ function initializeSheetHeaders(sheet, sheetName) {
     ],
     [CONFIG.SHEETS.PROMPTS]: [
       'prompt_name', 'prompt_text'
+    ],
+    [CONFIG.SHEETS.COURSES]: [
+      'course_name', 'canvas_course_id', 'canvas_base_url', 'canvas_item_type'
     ]
   };
 
@@ -253,6 +256,7 @@ function createDiscussion(data) {
     discussion_id: discussionId,
     date: data.date || new Date().toISOString().split('T')[0],
     section: data.section || '',
+    course: data.course || '',
     audio_file_id: data.audio_file_id || '',
     status: CONFIG.STATUS.UPLOADED,
     next_step: 'Waiting for transcription...',
@@ -260,6 +264,7 @@ function createDiscussion(data) {
     group_feedback: '',
     approved: false,
     canvas_assignment_id: data.canvas_assignment_id || '',
+    canvas_item_type: data.canvas_item_type || '',
     error_message: '',
     created_at: now,
     updated_at: now
@@ -336,16 +341,18 @@ function getStudent(studentId) {
  * Get a student by name (case-insensitive)
  * @param {string} name
  * @param {string} section - Optional section filter
+ * @param {string} course - Optional course filter
  * @returns {Object|null}
  */
-function getStudentByName(name, section = null) {
+function getStudentByName(name, section = null, course = null) {
   const rows = getAllRows(CONFIG.SHEETS.STUDENTS);
   const normalizedName = name.toLowerCase().trim();
 
   return rows.find(row => {
     const nameMatch = String(row.name).toLowerCase().trim() === normalizedName;
     const sectionMatch = section ? row.section === section : true;
-    return nameMatch && sectionMatch;
+    const courseMatch = course ? row.course === course : true;
+    return nameMatch && sectionMatch && courseMatch;
   }) || null;
 }
 
@@ -355,7 +362,7 @@ function getStudentByName(name, section = null) {
  * @returns {string} Student ID
  */
 function upsertStudent(data) {
-  const existing = getStudentByName(data.name, data.section);
+  const existing = getStudentByName(data.name, data.section, data.course || null);
 
   if (existing) {
     updateRow(CONFIG.SHEETS.STUDENTS, existing._rowIndex, data);
@@ -572,6 +579,203 @@ function upsertPrompt(name, text) {
   } else {
     insertRow(CONFIG.SHEETS.PROMPTS, { prompt_name: name, prompt_text: text });
   }
+}
+
+// ============================================================================
+// COURSES CRUD & MULTI-COURSE HELPERS
+// ============================================================================
+
+/**
+ * Get all courses from the Courses sheet
+ * @returns {Object[]} Array of course row objects
+ */
+function getAllCourses() {
+  const ss = getSpreadsheet();
+  const sheet = ss.getSheetByName(CONFIG.SHEETS.COURSES);
+  if (!sheet) return [];
+  return getAllRows(CONFIG.SHEETS.COURSES).filter(c => c.course_name);
+}
+
+/**
+ * Get a course by its friendly name
+ * @param {string} name - The course_name value
+ * @returns {Object|null}
+ */
+function getCourseByName(name) {
+  if (!name) return null;
+  const courses = getAllCourses();
+  return courses.find(c => c.course_name === name) || null;
+}
+
+/**
+ * Check if multi-course mode is active.
+ * Returns true if the Courses sheet exists and has at least one row.
+ * @returns {boolean}
+ */
+function isMultiCourseMode() {
+  return getAllCourses().length > 0;
+}
+
+/**
+ * Get the Canvas course ID for a discussion, using the fallback chain:
+ * 1. Look up discussion.course in Courses sheet → canvas_course_id
+ * 2. Fall back to global getSetting('canvas_course_id')
+ * 3. If neither → error
+ *
+ * @param {Object} discussion - Discussion row object
+ * @returns {string} Canvas course ID
+ */
+function getCanvasCourseIdForDiscussion(discussion) {
+  // 1. Per-course lookup
+  if (discussion.course) {
+    const course = getCourseByName(discussion.course);
+    if (course && course.canvas_course_id) {
+      return String(course.canvas_course_id);
+    }
+  }
+
+  // 2. Global fallback
+  const globalId = getSetting('canvas_course_id');
+  if (globalId) return globalId;
+
+  // 3. Error
+  throw new Error(
+    'No Canvas course ID found. Set it on the Courses sheet (for multi-course) or in the Settings sheet.'
+  );
+}
+
+/**
+ * Get the effective Canvas item type for a discussion.
+ * 3-tier fallback: per-discussion → per-course → global setting.
+ *
+ * @param {Object} discussion - Discussion row object
+ * @returns {string} 'assignment' or 'discussion'
+ */
+function getCanvasItemTypeForDiscussion(discussion) {
+  // 1. Per-discussion override
+  const perDiscussion = discussion.canvas_item_type;
+  if (perDiscussion === 'assignment' || perDiscussion === 'discussion') {
+    return perDiscussion;
+  }
+
+  // 2. Per-course override
+  if (discussion.course) {
+    const course = getCourseByName(discussion.course);
+    if (course) {
+      const perCourse = course.canvas_item_type;
+      if (perCourse === 'assignment' || perCourse === 'discussion') {
+        return perCourse;
+      }
+    }
+  }
+
+  // 3. Global setting
+  const global = getSetting('canvas_item_type');
+  return global === 'discussion' ? 'discussion' : 'assignment';
+}
+
+/**
+ * Get the Canvas base URL for a discussion.
+ * Checks per-course override first, then falls back to global.
+ *
+ * @param {Object} discussion - Discussion row object
+ * @returns {string} Canvas base URL
+ */
+function getCanvasBaseUrlForDiscussion(discussion) {
+  if (discussion.course) {
+    const course = getCourseByName(discussion.course);
+    if (course && course.canvas_base_url) {
+      return String(course.canvas_base_url).replace(/\/$/, '');
+    }
+  }
+  return getCanvasBaseUrl();
+}
+
+/**
+ * Get students filtered by section and optionally by course.
+ * In multi-course mode, filters by both section and course.
+ * In single-course mode, filters by section only (backward compatible).
+ *
+ * @param {string} section - Section name
+ * @param {string} course - Optional course name
+ * @returns {Object[]}
+ */
+function getStudentsBySectionAndCourse(section, course = null) {
+  const rows = getAllRows(CONFIG.SHEETS.STUDENTS);
+  return rows.filter(row => {
+    const sectionMatch = section ? row.section === section : true;
+    const courseMatch = course ? row.course === course : true;
+    return sectionMatch && courseMatch;
+  });
+}
+
+/**
+ * Migrate existing spreadsheet to multi-course mode.
+ * - Inserts 'course' columns into Discussions and Students sheets if missing
+ * - Creates Courses sheet if missing
+ * - Pre-populates with current canvas_course_id if set
+ */
+function migrateToMultiCourse() {
+  const ss = getSpreadsheet();
+
+  // Add 'course' column to Discussions if missing
+  const discSheet = ss.getSheetByName(CONFIG.SHEETS.DISCUSSIONS);
+  if (discSheet) {
+    const discHeaders = discSheet.getRange(1, 1, 1, discSheet.getLastColumn()).getValues()[0];
+    if (!discHeaders.includes('course')) {
+      // Insert after 'section' column
+      const sectionIdx = discHeaders.indexOf('section');
+      const insertAt = sectionIdx >= 0 ? sectionIdx + 2 : discHeaders.length + 1;
+      discSheet.insertColumnAfter(insertAt - 1);
+      discSheet.getRange(1, insertAt).setValue('course')
+        .setFontWeight('bold')
+        .setBackground('#4285f4')
+        .setFontColor('white');
+      Logger.log('Added "course" column to Discussions sheet');
+    }
+  }
+
+  // Add 'course' column to Students if missing
+  const studSheet = ss.getSheetByName(CONFIG.SHEETS.STUDENTS);
+  if (studSheet) {
+    const studHeaders = studSheet.getRange(1, 1, 1, studSheet.getLastColumn()).getValues()[0];
+    if (!studHeaders.includes('course')) {
+      // Insert after 'section' column
+      const sectionIdx = studHeaders.indexOf('section');
+      const insertAt = sectionIdx >= 0 ? sectionIdx + 2 : studHeaders.length + 1;
+      studSheet.insertColumnAfter(insertAt - 1);
+      studSheet.getRange(1, insertAt).setValue('course')
+        .setFontWeight('bold')
+        .setBackground('#4285f4')
+        .setFontColor('white');
+      Logger.log('Added "course" column to Students sheet');
+    }
+  }
+
+  // Create Courses sheet if it doesn't exist
+  let coursesSheet = ss.getSheetByName(CONFIG.SHEETS.COURSES);
+  if (!coursesSheet) {
+    coursesSheet = ss.insertSheet(CONFIG.SHEETS.COURSES);
+    initializeSheetHeaders(coursesSheet, CONFIG.SHEETS.COURSES);
+    Logger.log('Created Courses sheet');
+  }
+
+  // Pre-populate with current canvas_course_id if set
+  const existingCourses = getAllCourses();
+  if (existingCourses.length === 0) {
+    const courseId = getSetting('canvas_course_id');
+    if (courseId) {
+      insertRow(CONFIG.SHEETS.COURSES, {
+        course_name: 'My Course',
+        canvas_course_id: courseId,
+        canvas_base_url: '',
+        canvas_item_type: ''
+      });
+      Logger.log(`Pre-populated Courses sheet with course ID ${courseId}`);
+    }
+  }
+
+  Logger.log('Multi-course migration complete');
 }
 
 // ============================================================================

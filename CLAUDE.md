@@ -67,17 +67,18 @@ Controlled by `mode` setting in the Settings sheet:
 | `Webapp.gs` | Web app entry point (`doGet()`), audio upload handler, recorder config endpoint |
 | `RecorderApp.html` | Mobile-first recording UI served by the web app (HTML/CSS/JS, no external deps) |
 
-### Sheets Structure (7 sheets)
+### Sheets Structure (8 sheets)
 
 | Sheet | Purpose |
 |-------|---------|
 | `Settings` | Key-value global config (mode, distribution flags, grade scale, teacher info) |
-| `Discussions` | One row per discussion session with status, grade, group_feedback, next_step |
-| `Students` | Student roster with email and Canvas IDs |
+| `Discussions` | One row per discussion session with status, grade, group_feedback, next_step, course |
+| `Students` | Student roster with email, Canvas IDs, and course assignment |
 | `Transcripts` | Raw/named transcripts, speaker map JSON, teacher feedback |
 | `SpeakerMap` | One row per speaker per discussion for teacher review/confirmation |
 | `StudentReports` | Individual student reports with contributions, grades, feedback (individual mode) |
 | `Prompts` | Teacher-editable prompt templates read at runtime |
+| `Courses` | Multi-course lookup table: course_name, canvas_course_id, canvas_base_url, canvas_item_type |
 
 ### Key Patterns
 
@@ -90,6 +91,7 @@ Controlled by `mode` setting in the Settings sheet:
 - **Error logging**: Errors append to `Discussions.error_message` with timestamps. `next_step` column shows "ERROR: ..." for teacher visibility. All errors also go to `Logger.log()`.
 - **Rate limiting**: `Utilities.sleep()` calls between API requests (200-500ms) to avoid hitting external API limits.
 - **GAS execution limit**: 6-minute timeout for script execution. `CONFIG.LIMITS.GAS_TIMEOUT_MS` is set to 5 minutes as a safety margin. Stuck transcriptions detected after 10 minutes.
+- **Multi-course support**: Optional Courses sheet enables one spreadsheet to handle multiple Canvas courses. `isMultiCourseMode()` checks if any courses are defined. Fallback chain: per-discussion course → Courses sheet lookup → global Settings value. Fully backward compatible — if no Courses sheet or empty, all code paths use global `canvas_course_id`.
 
 ### External APIs
 

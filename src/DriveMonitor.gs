@@ -77,19 +77,36 @@ function checkForNewAudioFiles() {
 }
 
 /**
- * Parse section and date from filename
+ * Parse section, date, and course from filename.
  * Expected formats:
  * - "Section 3 - 2024-01-15.m4a"
  * - "Period 3 - 2024-01-15.m4a" (legacy)
  * - "S3_20240115.mp3"
  * - "P3 Discussion.m4a" (date defaults to today)
+ * Multi-course format:
+ * - "AP English - Section 3 - 2024-01-15.m4a"
  *
  * @param {string} fileName
- * @returns {Object} {section, date}
+ * @returns {Object} {section, date, course}
  */
 function parseFileName(fileName) {
   let section = '';
   let date = new Date().toISOString().split('T')[0];  // Default to today
+  let course = '';
+
+  // In multi-course mode, check if filename starts with a known course name
+  if (isMultiCourseMode()) {
+    const courses = getAllCourses();
+    for (const c of courses) {
+      const name = c.course_name;
+      if (name && fileName.startsWith(name)) {
+        course = name;
+        // Strip the course prefix and separator for further parsing
+        fileName = fileName.substring(name.length).replace(/^\s*[-–—_]\s*/, '');
+        break;
+      }
+    }
+  }
 
   // Try to extract section (supports "Section N", "Period N", "S3", "P3")
   const sectionMatch = fileName.match(/[SsPp](?:ection\s*|eriod\s*)?(\d+)/);
@@ -104,7 +121,7 @@ function parseFileName(fileName) {
     date = `${dateMatch[1]}-${dateMatch[2]}-${dateMatch[3]}`;
   }
 
-  return { section, date };
+  return { section, date, course };
 }
 
 /**
@@ -116,11 +133,15 @@ function processNewAudioFile(fileInfo) {
   const parsed = parseFileName(fileInfo.name);
 
   // Create discussion record
-  const discussionId = createDiscussion({
+  const discussionData = {
     date: parsed.date,
     section: parsed.section,
     audio_file_id: fileInfo.id
-  });
+  };
+  if (parsed.course) {
+    discussionData.course = parsed.course;
+  }
+  const discussionId = createDiscussion(discussionData);
 
   Logger.log(`Created discussion ${discussionId} for file ${fileInfo.name}`);
 

@@ -31,16 +31,41 @@ function doGet() {
 /**
  * Get configuration needed by the recorder UI.
  * Returns known sections from the Students sheet so the teacher can pick one.
- * @returns {Object} { sections: string[] }
+ * In multi-course mode, also returns courses and a course→sections mapping.
+ * @returns {Object} { sections, multiCourse, courses, coursesSections }
  */
 function getRecorderConfig() {
   try {
     const students = getAllRows(CONFIG.SHEETS.STUDENTS);
     const sections = [...new Set(students.map(s => s.section).filter(Boolean))];
-    return { sections: sections.sort() };
+    const multiCourse = isMultiCourseMode();
+
+    const config = {
+      sections: sections.sort(),
+      multiCourse: multiCourse
+    };
+
+    if (multiCourse) {
+      const courses = getAllCourses();
+      config.courses = courses.map(c => c.course_name);
+
+      // Build course → sections mapping from student data
+      const coursesSections = {};
+      for (const course of config.courses) {
+        const courseSections = [...new Set(
+          students
+            .filter(s => s.course === course && s.section)
+            .map(s => s.section)
+        )];
+        coursesSections[course] = courseSections.sort();
+      }
+      config.coursesSections = coursesSections;
+    }
+
+    return config;
   } catch (e) {
     Logger.log('getRecorderConfig error: ' + e.message);
-    return { sections: [] };
+    return { sections: [], multiCourse: false };
   }
 }
 
