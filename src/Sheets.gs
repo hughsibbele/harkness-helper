@@ -775,6 +775,9 @@ function migrateToMultiCourse() {
     }
   }
 
+  // Re-apply formatting (checkboxes, wrapping, dropdowns)
+  formatSheets();
+
   Logger.log('Multi-course migration complete');
 }
 
@@ -818,6 +821,13 @@ function formatSheets() {
     if (approvedCol > 0) {
       const checkboxRule = SpreadsheetApp.newDataValidation().requireCheckbox().build();
       discussionsSheet.getRange(2, approvedCol, 1000, 1).setDataValidation(checkboxRule);
+    }
+
+    // Wrap the next_step column so instructions are readable
+    const nextStepCol = getColumnIndex(CONFIG.SHEETS.DISCUSSIONS, 'next_step');
+    if (nextStepCol > 0) {
+      discussionsSheet.getRange(2, nextStepCol, 1000, 1).setWrap(true);
+      discussionsSheet.setColumnWidth(nextStepCol, 250);
     }
 
     // canvas_item_type dropdown

@@ -4,8 +4,8 @@ A Google Apps Script application that automates the workflow for Harkness discus
 
 ## Features
 
-- **Automatic Transcription**: Upload audio recordings to Google Drive and get them automatically transcribed with speaker diarization (ElevenLabs Scribe v2)
-- **Speaker Identification**: Gemini AI identifies students from their introductions ("Hi, I'm...")
+- **Automatic Transcription**: Upload audio recordings to Google Drive and get them automatically transcribed with speaker diarization (ElevenLabs Scribe v2). When a synced roster exists, the expected speaker count is passed to ElevenLabs for more accurate diarization.
+- **Speaker Identification**: Gemini 2.0 Flash identifies students from their introductions ("Hi, I'm...")
 - **Two Grading Modes**: Group mode (one grade for the whole class) or Individual mode (per-student grades and feedback)
 - **AI Feedback Generation**: Gemini generates 2-paragraph feedback using a critique sandwich format, editable by the teacher before sending
 - **Canvas Integration**: Sync student roster, post grades and feedback (supports assignments and discussion topics, multi-section)
@@ -45,7 +45,7 @@ uploaded → transcribing → mapping → review → approved → sent
    - `Sheets.gs` — Generic CRUD layer over Google Sheets (the "database")
    - `Prompts.gs` — Sheet-based prompt system with default fallbacks
    - `ElevenLabs.gs` — Synchronous transcription via ElevenLabs Scribe v2
-   - `Gemini.gs` — Gemini API: speaker ID, feedback generation, contribution extraction
+   - `Gemini.gs` — Gemini 2.0 Flash API: speaker ID, feedback generation, contribution extraction
    - `Canvas.gs` — Canvas LMS API: roster sync, grade posting, course data fetch
    - `DriveMonitor.gs` — Upload folder monitoring, filename parsing
    - `Email.gs` — HTML/plaintext email templates and distribution
@@ -126,12 +126,14 @@ The recorder lets you record and upload discussions directly from your phone's b
 
 **Option A: Use the Recorder web app (recommended)**
 
-1. Open the Recorder on your phone
-2. Tap the record button and have students introduce themselves at the beginning
-3. Use pause/resume as needed
-4. Tap stop when the discussion ends
-5. Select the section, confirm the date, and tap Upload
-6. The file lands in the Drive upload folder with the correct filename — the processing pipeline takes it from there
+1. Make sure you've synced your Canvas roster first (this helps speaker diarization accuracy)
+2. Open the Recorder on your phone
+3. If multi-course is enabled, select the course first, then the section
+4. Tap the record button and have students introduce themselves at the beginning
+5. Use pause/resume as needed
+6. Tap stop when the discussion ends
+7. Confirm the section and date, then tap Upload
+8. The file lands in the Drive upload folder with the correct filename — the processing pipeline takes it from there
 
 **Option B: Manual upload**
 
@@ -223,7 +225,7 @@ Edit prompts directly in the sheet — no code changes needed.
 | Service | Cost |
 |---------|------|
 | ElevenLabs | Scribe v2 pricing (check current rates at elevenlabs.io) |
-| Google Gemini | Free tier usually sufficient |
+| Google Gemini 2.0 Flash | Free tier usually sufficient |
 | Canvas API | Free |
 | Google Apps Script | Free |
 
@@ -239,6 +241,7 @@ Run `testConfiguration()` from the script editor to see which API keys are missi
 
 ### Speaker identification wrong
 - Students need clear introductions at the start
+- Sync your roster **before** recording — the system uses the student count to hint ElevenLabs on how many speakers to expect, which significantly improves diarization
 - You can manually edit speaker names in the SpeakerMap sheet
 - Click "Generate Feedback" again after correcting
 

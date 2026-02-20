@@ -221,7 +221,7 @@ function processSpeakerMapping(discussionId) {
   updateDiscussion(discussionId, {
     status: CONFIG.STATUS.MAPPING,
     next_step: isGroupMode()
-      ? 'Enter grade on this row, then click "Generate Feedback"'
+      ? 'Enter grade in the Grade column on this row, then click "Generate Feedback"'
       : 'Review speaker map in SpeakerMap sheet, confirm all speakers, then click "Generate Feedback"'
   });
 
@@ -247,7 +247,7 @@ function advanceMappingStatus() {
       // Group mode: auto-advance to review
       updateDiscussion(discussionId, {
         status: CONFIG.STATUS.REVIEW,
-        next_step: 'Enter grade on this row, then click "Generate Feedback"'
+        next_step: 'Enter grade in the Grade column on this row, then click "Generate Feedback"'
       });
       Logger.log(`Auto-advanced ${discussionId} to review (group mode)`);
     } else if (isSpeakerMapConfirmed(discussionId)) {
@@ -336,7 +336,7 @@ function generateFeedbackForDiscussions() {
         const grade = discussion.grade;
         if (!grade) {
           updateDiscussion(discussionId, {
-            next_step: 'Enter grade on this row, then click "Generate Feedback" again'
+            next_step: 'Enter grade in the Grade column on this row, then click "Generate Feedback" again'
           });
           continue;
         }
