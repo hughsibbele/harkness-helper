@@ -17,7 +17,7 @@
  */
 function callGemini(prompt, options = {}) {
   const apiKey = getGeminiKey();
-  const model = options.model || getSetting('gemini_model') || 'gemini-1.5-flash';
+  const model = options.model || getSetting('gemini_model') || 'gemini-2.0-flash';
 
   const url = `${CONFIG.ENDPOINTS.GEMINI}/models/${model}:generateContent?key=${apiKey}`;
 

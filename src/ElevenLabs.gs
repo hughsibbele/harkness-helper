@@ -16,9 +16,10 @@
 /**
  * Submit a transcription via direct blob upload (for files <= 50MB)
  * @param {string} fileId - Google Drive file ID
+ * @param {number} numSpeakers - Optional hint for expected number of speakers (max 32)
  * @returns {Object} ElevenLabs API response
  */
-function submitTranscriptionBlob(fileId) {
+function submitTranscriptionBlob(fileId, numSpeakers = null) {
   const apiKey = getElevenLabsKey();
   const sttModel = getSetting('elevenlabs_model') || 'scribe_v2';
   const file = DriveApp.getFileById(fileId);
@@ -50,6 +51,17 @@ function submitTranscriptionBlob(fileId) {
     'Content-Disposition: form-data; name="language_code"\r\n\r\n' +
     'en'
   );
+
+  // num_speakers hint (helps diarization accuracy with known class sizes)
+  if (numSpeakers && numSpeakers > 0) {
+    const capped = Math.min(numSpeakers, 32);
+    parts.push(
+      '--' + boundary + '\r\n' +
+      'Content-Disposition: form-data; name="num_speakers"\r\n\r\n' +
+      capped.toString()
+    );
+    Logger.log(`Hint: num_speakers=${capped}`);
+  }
 
   // Combine text parts
   const preFileData = Utilities.newBlob(parts.join('\r\n') + '\r\n').getBytes();
@@ -93,16 +105,17 @@ function submitTranscriptionBlob(fileId) {
 /**
  * Submit a transcription via cloud storage URL (for files > 50MB)
  * @param {string} audioUrl - Publicly accessible URL to the audio file
+ * @param {number} numSpeakers - Optional hint for expected number of speakers (max 32)
  * @returns {Object} ElevenLabs API response
  */
-function submitTranscriptionUrl(audioUrl) {
+function submitTranscriptionUrl(audioUrl, numSpeakers = null) {
   const apiKey = getElevenLabsKey();
   const sttModel = getSetting('elevenlabs_model') || 'scribe_v2';
 
   const boundary = '----FormBoundary' + Utilities.getUuid();
   const contentType = 'multipart/form-data; boundary=' + boundary;
 
-  const body =
+  let body =
     '--' + boundary + '\r\n' +
     'Content-Disposition: form-data; name="model_id"\r\n\r\n' +
     sttModel + '\r\n' +
@@ -111,7 +124,18 @@ function submitTranscriptionUrl(audioUrl) {
     'true\r\n' +
     '--' + boundary + '\r\n' +
     'Content-Disposition: form-data; name="language_code"\r\n\r\n' +
-    'en\r\n' +
+    'en\r\n';
+
+  if (numSpeakers && numSpeakers > 0) {
+    const capped = Math.min(numSpeakers, 32);
+    body +=
+      '--' + boundary + '\r\n' +
+      'Content-Disposition: form-data; name="num_speakers"\r\n\r\n' +
+      capped.toString() + '\r\n';
+    Logger.log(`Hint: num_speakers=${capped}`);
+  }
+
+  body +=
     '--' + boundary + '\r\n' +
     'Content-Disposition: form-data; name="cloud_storage_url"\r\n\r\n' +
     audioUrl + '\r\n' +
@@ -298,6 +322,22 @@ function startTranscription(discussionId) {
   let usedUrl = false;
   let result;
 
+  // Derive num_speakers hint from student roster (+1 for teacher)
+  let numSpeakers = null;
+  if (discussion.section) {
+    try {
+      const students = getStudentsBySectionAndCourse(
+        discussion.section, discussion.course || null
+      );
+      if (students.length > 0) {
+        numSpeakers = students.length + 1; // +1 for teacher
+        Logger.log(`Section "${discussion.section}" has ${students.length} students, hinting ${numSpeakers} speakers`);
+      }
+    } catch (e) {
+      Logger.log(`Could not determine speaker count: ${e.message}`);
+    }
+  }
+
   // Update status
   updateDiscussion(discussionId, {
     status: CONFIG.STATUS.TRANSCRIBING,
@@ -307,12 +347,12 @@ function startTranscription(discussionId) {
   try {
     if (sizeMB <= CONFIG.LIMITS.MAX_AUDIO_SIZE_MB) {
       Logger.log(`Transcribing ${file.getName()} via blob upload (${sizeMB.toFixed(1)} MB)`);
-      result = submitTranscriptionBlob(fileId);
+      result = submitTranscriptionBlob(fileId, numSpeakers);
     } else {
       Logger.log(`Transcribing ${file.getName()} via URL upload (${sizeMB.toFixed(1)} MB > ${CONFIG.LIMITS.MAX_AUDIO_SIZE_MB} MB threshold)`);
       const audioUrl = getDriveFileUrl(fileId);
       usedUrl = true;
-      result = submitTranscriptionUrl(audioUrl);
+      result = submitTranscriptionUrl(audioUrl, numSpeakers);
     }
   } catch (e) {
     // Restore permissions if we made the file public

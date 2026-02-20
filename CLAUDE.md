@@ -98,7 +98,7 @@ Controlled by `mode` setting in the Settings sheet:
 | API | Model/Tier | Used For |
 |-----|-----------|----------|
 | ElevenLabs | Scribe v2 | Synchronous transcription with speaker diarization |
-| Google Gemini | `gemini-1.5-flash` | Speaker ID, summaries, feedback generation |
+| Google Gemini | `gemini-2.0-flash` | Speaker ID, summaries, feedback generation |
 | Canvas LMS | REST v1 | Student roster, grade posting |
 
 ### Required OAuth Scopes (appsscript.json)

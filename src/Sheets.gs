@@ -222,7 +222,7 @@ function initializeSettings() {
     'teacher_email': '',
     'teacher_name': '',
     'email_subject_template': 'Harkness Discussion Report - {date}',
-    'gemini_model': 'gemini-1.5-flash',
+    'gemini_model': 'gemini-2.0-flash',
     'elevenlabs_model': 'scribe_v2',
     'canvas_course_id': '',
     'canvas_base_url': '',
