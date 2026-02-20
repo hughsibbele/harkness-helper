@@ -23,6 +23,21 @@
 function onOpen() {
   const ui = SpreadsheetApp.getUi();
 
+  // Check multi-course mode safely — onOpen() runs as a simple trigger
+  // where PropertiesService may not be available
+  let multiCourse = false;
+  try {
+    multiCourse = isMultiCourseMode();
+  } catch (e) {
+    // Fall back to checking the active spreadsheet directly
+    try {
+      const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Courses');
+      if (sheet && sheet.getLastRow() > 1) multiCourse = true;
+    } catch (e2) {
+      // Ignore — default to single-course menu
+    }
+  }
+
   const menu = ui.createMenu('Harkness Helper')
     .addItem('Setup Folders', 'setupDriveFolders')
     .addItem('Initialize Sheets', 'initializeAllSheets')
@@ -35,7 +50,7 @@ function onOpen() {
     .addItem('Sync Canvas Roster', 'menuSyncCanvasRoster')
     .addItem('Fetch Canvas Course Data', 'menuFetchCanvasCourseData');
 
-  if (isMultiCourseMode()) {
+  if (multiCourse) {
     menu.addItem('Sync All Course Rosters', 'menuSyncAllCourseRosters');
   }
 
@@ -43,7 +58,7 @@ function onOpen() {
     .addItem('Setup Automatic Triggers', 'setupTriggers')
     .addItem('Remove All Triggers', 'removeAllTriggers');
 
-  if (!isMultiCourseMode()) {
+  if (!multiCourse) {
     menu.addSeparator()
       .addItem('Enable Multi-Course', 'menuEnableMultiCourse');
   }
