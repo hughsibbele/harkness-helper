@@ -890,13 +890,15 @@ function reorderColumns() {
     // Read current headers
     const currentHeaders = sheet.getRange(1, 1, 1, lastCol).getValues()[0].map(String);
 
+    // Find canonical columns missing from the sheet
+    const missingHeaders = targetOrder.filter(h => !currentHeaders.includes(h));
+
     // Build column mapping: for each target column, find its current position
-    const colMap = [];  // array of current column indices (0-based) in target order
+    // Missing columns get index -1 (filled with empty string below)
+    const colMap = [];
     for (const header of targetOrder) {
       const idx = currentHeaders.indexOf(header);
-      if (idx >= 0) {
-        colMap.push(idx);
-      }
+      colMap.push(idx);  // -1 if missing
     }
     // Append any extra columns not in the canonical order (preserves unknown columns)
     for (let i = 0; i < currentHeaders.length; i++) {
@@ -905,11 +907,15 @@ function reorderColumns() {
       }
     }
 
-    // Check if already in order
-    const alreadyOrdered = colMap.every((val, i) => val === i);
+    // Check if already in order with no missing columns
+    const alreadyOrdered = missingHeaders.length === 0 && colMap.every((val, i) => val === i);
     if (alreadyOrdered) {
       Logger.log(`${sheetName}: columns already in order, skipping.`);
       continue;
+    }
+
+    if (missingHeaders.length > 0) {
+      Logger.log(`${sheetName}: adding missing columns: ${missingHeaders.join(', ')}`);
     }
 
     // Read all data (headers + rows)
@@ -917,8 +923,16 @@ function reorderColumns() {
       ? sheet.getRange(1, 1, lastRow, lastCol).getValues()
       : [];
 
-    // Reorder each row according to colMap
-    const reordered = allData.map(row => colMap.map(idx => row[idx]));
+    // Build the new header row (canonical names for all positions)
+    const newHeaders = colMap.map((idx, pos) =>
+      idx === -1 ? targetOrder[pos] : currentHeaders[idx]
+    );
+
+    // Reorder data rows, using '' for missing columns
+    const reordered = [newHeaders];
+    for (let r = 1; r < allData.length; r++) {
+      reordered.push(colMap.map(idx => idx === -1 ? '' : allData[r][idx]));
+    }
 
     // Write back
     sheet.clear();
