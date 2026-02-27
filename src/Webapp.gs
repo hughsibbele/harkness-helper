@@ -16,12 +16,53 @@
 // ============================================================================
 
 /**
- * Serve the recorder HTML page
+ * Serve the recorder HTML page, or handle API requests when called with an action parameter.
+ * @param {Object} e - The event parameter from Apps Script
  */
-function doGet() {
+function doGet(e) {
+  const action = e?.parameter?.action;
+
+  if (action === "getConfig") {
+    try {
+      const config = getRecorderConfig();
+      return ContentService.createTextOutput(JSON.stringify(config))
+        .setMimeType(ContentService.MimeType.JSON);
+    } catch (error) {
+      return ContentService.createTextOutput(JSON.stringify({
+        status: "error", error: error.toString()
+      })).setMimeType(ContentService.MimeType.JSON);
+    }
+  }
+
+  // Default: serve the HTML page
   return HtmlService.createHtmlOutputFromFile('RecorderApp')
     .setTitle('Harkness Recorder')
     .addMetaTag('viewport', 'width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no');
+}
+
+/**
+ * Handle POST requests for audio upload from the GitHub Pages frontend.
+ * @param {Object} e - The event parameter from Apps Script
+ */
+function doPost(e) {
+  try {
+    const action = e?.parameter?.action;
+
+    if (action === "uploadAudio") {
+      const body = JSON.parse(e.postData.contents);
+      const result = uploadAudioFile(body.base64Data, body.fileName, body.mimeType);
+      return ContentService.createTextOutput(JSON.stringify(result))
+        .setMimeType(ContentService.MimeType.JSON);
+    }
+
+    return ContentService.createTextOutput(JSON.stringify({
+      status: "error", error: "Unknown action"
+    })).setMimeType(ContentService.MimeType.JSON);
+  } catch (error) {
+    return ContentService.createTextOutput(JSON.stringify({
+      status: "error", error: error.toString()
+    })).setMimeType(ContentService.MimeType.JSON);
+  }
 }
 
 // ============================================================================

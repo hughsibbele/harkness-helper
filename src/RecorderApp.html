@@ -430,6 +430,30 @@
 
   <script>
     // =====================================================================
+    // BACKEND COMMUNICATION
+    // =====================================================================
+
+    var APPS_SCRIPT_URL = "https://script.google.com/macros/s/DEPLOYMENT_ID/exec";
+
+    function callBackend(action, data) {
+      var url = new URL(APPS_SCRIPT_URL);
+      url.searchParams.set("action", action);
+
+      var options = { redirect: "follow" };
+      if (data !== undefined) {
+        options.method = "POST";
+        options.headers = { "Content-Type": "text/plain" };
+        options.body = JSON.stringify(data);
+      }
+
+      return fetch(url.toString(), options)
+        .then(function(response) {
+          if (!response.ok) throw new Error("Backend error: " + response.status);
+          return response.json();
+        });
+    }
+
+    // =====================================================================
     // STATE
     // =====================================================================
 
@@ -455,8 +479,8 @@
     document.getElementById('input-date').value = new Date().toISOString().split('T')[0];
 
     // Load sections and courses from server
-    google.script.run
-      .withSuccessHandler(function(config) {
+    callBackend("getConfig")
+      .then(function(config) {
         sections = config.sections || [];
         multiCourse = config.multiCourse || false;
         courses = config.courses || [];
@@ -467,10 +491,9 @@
           document.getElementById('course-group').classList.add('visible');
         }
       })
-      .withFailureHandler(function() {
+      .catch(function() {
         buildSectionButtons();
-      })
-      .getRecorderConfig();
+      });
 
     function buildSectionButtons() {
       var container = document.getElementById('section-buttons');
@@ -680,18 +703,17 @@
       reader.onloadend = function() {
         var base64 = reader.result.split(',')[1];
 
-        google.script.run
-          .withSuccessHandler(function(result) {
+        callBackend("uploadAudio", { base64Data: base64, fileName: fileName, mimeType: mimeType })
+          .then(function(result) {
             document.getElementById('success-text').textContent =
               'Uploaded: ' + result.fileName;
             showState('success');
           })
-          .withFailureHandler(function(err) {
+          .catch(function(err) {
             document.getElementById('error-text').textContent =
               'Upload failed: ' + (err.message || err);
             showState('error');
-          })
-          .uploadAudioFile(base64, fileName, mimeType);
+          });
       };
       reader.readAsDataURL(audioBlob);
     }

@@ -113,12 +113,27 @@ In the Apps Script editor:
 
 The recorder lets you record and upload discussions directly from your phone's browser.
 
+**Important:** The recorder uses `navigator.mediaDevices.getUserMedia()` for microphone access. Apps Script's sandboxed iframe does not grant microphone permissions, so the recorder UI (`RecorderApp.html`) must be hosted on **GitHub Pages** (or another host you control). Apps Script serves only as the backend API.
+
+#### Deploy the Apps Script backend
+
 1. In the Apps Script editor, click **Deploy > New deployment**
 2. Select type: **Web app**
 3. Execute as: **Me**
-4. Who has access: **Only myself** (or anyone with a Google account in your org)
-5. Click **Deploy** and copy the URL
-6. On your phone, open the URL in Safari/Chrome and use **Share > Add to Home Screen** for app-like access
+4. Who has access: **Anyone** (so the GitHub Pages frontend can reach it)
+5. Click **Deploy** and copy the deployment URL
+
+#### Host the recorder on GitHub Pages
+
+1. Copy `src/RecorderApp.html` to your GitHub Pages site (e.g., `docs/RecorderApp.html` or the repo root)
+2. Open the file and update the `APPS_SCRIPT_URL` variable near the top of the `<script>` block with your deployment URL:
+   ```javascript
+   var APPS_SCRIPT_URL = "https://script.google.com/macros/s/YOUR_DEPLOYMENT_ID/exec";
+   ```
+3. Push to GitHub and enable GitHub Pages in the repository settings
+4. On your phone, open the GitHub Pages URL in Safari/Chrome and use **Share > Add to Home Screen** for app-like access
+
+The recorder frontend calls the Apps Script backend via `fetch()` for configuration loading and audio upload. The `Content-Type: text/plain` header is used intentionally to avoid CORS preflight requests.
 
 ## Usage
 
