@@ -77,18 +77,31 @@ function checkForNewAudioFiles() {
 }
 
 /**
+ * Get distinct section names from the Students sheet.
+ * Optionally filtered by course for multi-course mode.
+ * @param {string} [course] - Course name to filter by
+ * @returns {string[]} Unique section names, sorted longest-first
+ */
+function getKnownSections(course) {
+  const rows = getAllRows(CONFIG.SHEETS.STUDENTS);
+  const sections = new Set();
+  for (const row of rows) {
+    if (row.section) {
+      if (course && row.course && row.course !== course) continue;
+      sections.add(row.section);
+    }
+  }
+  // Sort longest-first so exact substring matching prefers longer matches
+  return Array.from(sections).sort((a, b) => b.length - a.length);
+}
+
+/**
  * Parse section, date, and course from filename.
- * Expected formats:
- * - "Section 3 - 2024-01-15.m4a"
- * - "Period 3 - 2024-01-15.m4a" (legacy)
- * - "S3_20240115.mp3"
- * - "P3 Discussion.m4a" (date defaults to today)
- * - "A Block - 2024-01-15.m4a" (block letter A-G)
- * - "Block A - 2024-01-15.m4a"
- * - Standalone letter A-G also recognized (e.g., "Chekhov A")
- * Multi-course format:
- * - "AP English - Section 3 - 2024-01-15.m4a"
- * - "Chekhov A Block - 2024-01-15.m4a"
+ *
+ * Section matching strategy (in order):
+ * 1. Exact substring match against known sections from Students sheet
+ * 2. Token-based fuzzy match against known sections
+ * 3. Regex fallback (Section N, Block A, etc.) for empty rosters
  *
  * @param {string} fileName
  * @returns {Object} {section, date, course}
@@ -115,25 +128,81 @@ function parseFileName(fileName) {
     }
   }
 
-  // Try to extract section (supports "Section N", "Period N", "S3", "P3")
-  const sectionMatch = fileName.match(/[SsPp](?:ection\s*|eriod\s*)?(\d+)/);
-  if (sectionMatch) {
-    section = `Section ${sectionMatch[1]}`;
-  } else {
-    // Try block formats: "Block A", "A Block", or standalone letter A-G
-    const blockMatch = fileName.match(/[Bb]lock\s*([A-Ga-g])/) ||
-                       fileName.match(/([A-Ga-g])\s*[Bb]lock/) ||
-                       fileName.match(/(?:^|\s|[-–—_])([A-Ga-g])(?:\s|[-–—_.]|$)/);
-    if (blockMatch) {
-      section = `Block ${blockMatch[1].toUpperCase()}`;
-    }
-  }
-
-  // Try to extract date
+  // Try to extract date first (before section matching, since date is independent)
   // Format: YYYY-MM-DD or YYYYMMDD
   const dateMatch = fileName.match(/(\d{4})[-_]?(\d{2})[-_]?(\d{2})/);
   if (dateMatch) {
     date = `${dateMatch[1]}-${dateMatch[2]}-${dateMatch[3]}`;
+  }
+
+  // --- Section matching ---
+  const knownSections = getKnownSections(course);
+
+  if (knownSections.length > 0) {
+    // Strategy 1: Exact substring match (longest match wins, already sorted)
+    const fileNameLower = fileName.toLowerCase();
+    for (const s of knownSections) {
+      if (fileNameLower.includes(s.toLowerCase())) {
+        section = s;
+        break;
+      }
+    }
+
+    // Strategy 2: Token-based fuzzy match
+    if (!section) {
+      // Tokenize filename: split on non-alphanumeric characters, drop date tokens and empties
+      const fileTokens = fileName.split(/[^a-zA-Z0-9]+/).filter(t => t && !t.match(/^\d{4,}$/));
+
+      let bestSection = '';
+      let bestScore = 0;
+      let bestRatio = 0;
+
+      for (const s of knownSections) {
+        const sectionTokens = s.split(/[^a-zA-Z0-9]+/).filter(t => t);
+        let matchCount = 0;
+
+        for (const ft of fileTokens) {
+          const ftLower = ft.toLowerCase();
+          for (const st of sectionTokens) {
+            const stLower = st.toLowerCase();
+            // A token matches if either contains the other (case-insensitive)
+            if (stLower.includes(ftLower) || ftLower.includes(stLower)) {
+              matchCount++;
+              break; // Count each file token at most once
+            }
+          }
+        }
+
+        if (matchCount > 0) {
+          // Ratio: what fraction of file tokens matched
+          const ratio = matchCount / fileTokens.length;
+          if (matchCount > bestScore || (matchCount === bestScore && ratio > bestRatio)) {
+            bestScore = matchCount;
+            bestRatio = ratio;
+            bestSection = s;
+          }
+        }
+      }
+
+      if (bestSection) {
+        section = bestSection;
+      }
+    }
+  }
+
+  // Strategy 3: Regex fallback for when roster is empty
+  if (!section) {
+    const sectionMatch = fileName.match(/[SsPp](?:ection\s*|eriod\s*)?(\d+)/);
+    if (sectionMatch) {
+      section = `Section ${sectionMatch[1]}`;
+    } else {
+      const blockMatch = fileName.match(/[Bb]lock\s*([A-Ga-g])/) ||
+                         fileName.match(/([A-Ga-g])\s*[Bb]lock/) ||
+                         fileName.match(/(?:^|\s|[-–—_])([A-Ga-g])(?:\s|[-–—_.]|$)/);
+      if (blockMatch) {
+        section = `Block ${blockMatch[1].toUpperCase()}`;
+      }
+    }
   }
 
   return { section, date, course };
