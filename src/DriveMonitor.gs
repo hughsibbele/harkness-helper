@@ -120,7 +120,7 @@ function parseFileName(fileName) {
     // Try block formats: "Block A", "A Block", or standalone letter A-G
     const blockMatch = fileName.match(/[Bb]lock\s*([A-Ga-g])/) ||
                        fileName.match(/([A-Ga-g])\s*[Bb]lock/) ||
-                       fileName.match(/(?:^|\s|[-–—_])([A-Ga-g])(?:\s|[-–—_]|$)/);
+                       fileName.match(/(?:^|\s|[-–—_])([A-Ga-g])(?:\s|[-–—_.]|$)/);
     if (blockMatch) {
       section = `Block ${blockMatch[1].toUpperCase()}`;
     }
