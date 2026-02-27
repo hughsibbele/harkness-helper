@@ -1,7 +1,7 @@
 /**
  * Google Gemini API integration for LLM-powered analysis
  *
- * Uses Gemini 1.5 Flash for cost efficiency. Supports both group and
+ * Uses Gemini 2.0 Flash for cost efficiency. Supports both group and
  * individual feedback modes. All prompts read from the Prompts sheet.
  */
 

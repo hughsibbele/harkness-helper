@@ -1,10 +1,9 @@
 /**
  * Configuration management for Harkness Helper
  *
- * API keys and sensitive configuration are stored in Script Properties.
+ * API keys and sensitive configuration are stored in Script Properties
+ * (set automatically by the Setup Wizard).
  * Runtime settings (mode, distribution flags) live in the Settings sheet.
- * Run setupScriptProperties() once to initialize, then manually add your API keys
- * via File > Project Properties > Script Properties in the GAS editor.
  */
 
 // ============================================================================
@@ -74,7 +73,7 @@ function getRequiredProperty(key) {
   const props = PropertiesService.getScriptProperties();
   const value = props.getProperty(key);
   if (!value) {
-    throw new Error(`Required configuration '${key}' is not set. Please add it in Script Properties.`);
+    throw new Error(`Required configuration '${key}' is not set. Please run the Setup Wizard from the Harkness Helper menu.`);
   }
   return value;
 }
@@ -190,34 +189,20 @@ function isIndividualMode() {
 // ============================================================================
 
 /**
- * Initialize Script Properties with placeholder values.
- * Run this once, then fill in actual values in the GAS editor:
- * File > Project Properties > Script Properties
+ * Check if the Setup Wizard has been completed.
+ * Returns true only when all 5 required Script Properties are set.
+ * @returns {boolean}
  */
-function setupScriptProperties() {
-  const props = PropertiesService.getScriptProperties();
-
-  const defaults = {
-    'ELEVENLABS_API_KEY': '',
-    'GEMINI_API_KEY': '',
-    'CANVAS_API_TOKEN': '',
-    'CANVAS_BASE_URL': 'https://yourschool.instructure.com',
-    'SPREADSHEET_ID': '',
-    'AUDIO_FOLDER_ID': '',
-    'PROCESSING_FOLDER_ID': ''
-  };
-
-  // Only set properties that don't already exist
-  const existing = props.getProperties();
-  for (const [key, value] of Object.entries(defaults)) {
-    if (!(key in existing)) {
-      props.setProperty(key, value);
-    }
-  }
-
-  Logger.log('Script Properties initialized. Please fill in the values in Project Properties.');
-  Logger.log('Required properties: ELEVENLABS_API_KEY, GEMINI_API_KEY, SPREADSHEET_ID, AUDIO_FOLDER_ID, PROCESSING_FOLDER_ID');
-  Logger.log('For Canvas integration: CANVAS_API_TOKEN, CANVAS_BASE_URL');
+function isSetupComplete() {
+  const required = [
+    'SPREADSHEET_ID',
+    'ELEVENLABS_API_KEY',
+    'GEMINI_API_KEY',
+    'AUDIO_FOLDER_ID',
+    'PROCESSING_FOLDER_ID'
+  ];
+  const props = PropertiesService.getScriptProperties().getProperties();
+  return required.every(key => !!props[key]);
 }
 
 /**

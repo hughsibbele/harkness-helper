@@ -1,14 +1,12 @@
 /**
- * Web App for Harkness Recorder
+ * Web App API backend for Harkness Recorder
  *
- * Serves a mobile-friendly recording page that captures audio,
- * asks for section + date, and uploads directly to the Drive upload folder.
+ * The recorder frontend is hosted on GitHub Pages (docs/index.html).
+ * This backend handles API requests from the frontend via fetch().
  *
- * Deploy: Publish > Deploy as web app
+ * Deploy: Deploy > New deployment > Web app
  *   - Execute as: Me
- *   - Who has access: Anyone with a Google account (or just yourself)
- *
- * The resulting URL can be bookmarked or added to the phone's home screen.
+ *   - Who has access: Anyone
  */
 
 // ============================================================================
@@ -16,7 +14,7 @@
 // ============================================================================
 
 /**
- * Serve the recorder HTML page, or handle API requests when called with an action parameter.
+ * Handle GET API requests from the GitHub Pages frontend.
  * @param {Object} e - The event parameter from Apps Script
  */
 function doGet(e) {
@@ -34,10 +32,11 @@ function doGet(e) {
     }
   }
 
-  // Default: serve the HTML page
-  return HtmlService.createHtmlOutputFromFile('RecorderApp')
-    .setTitle('Harkness Recorder')
-    .addMetaTag('viewport', 'width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no');
+  // No HTML served from GAS — frontend is on GitHub Pages
+  return ContentService.createTextOutput(JSON.stringify({
+    status: "error",
+    error: "Use the GitHub Pages recorder. This URL is the API backend only."
+  })).setMimeType(ContentService.MimeType.JSON);
 }
 
 /**
@@ -66,7 +65,7 @@ function doPost(e) {
 }
 
 // ============================================================================
-// CLIENT-CALLABLE FUNCTIONS
+// API HANDLERS (called from GitHub Pages frontend via fetch)
 // ============================================================================
 
 /**

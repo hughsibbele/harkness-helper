@@ -7,6 +7,24 @@
  */
 
 // ============================================================================
+// HTML ESCAPING
+// ============================================================================
+
+/**
+ * Escape special HTML characters to prevent XSS and rendering issues.
+ * @param {string} str - Raw string to escape
+ * @returns {string} HTML-safe string
+ */
+function escapeHtmlForEmail(str) {
+  return String(str || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+// ============================================================================
 // EMAIL TEMPLATES — GROUP MODE
 // ============================================================================
 
@@ -17,8 +35,11 @@
  * @returns {string} HTML email body
  */
 function generateGroupFeedbackEmailHtml(discussion, studentName) {
-  const date = discussion.date || 'Recent Discussion';
-  const period = discussion.section || 'Class';
+  const date = escapeHtmlForEmail(discussion.date || 'Recent Discussion');
+  const period = escapeHtmlForEmail(discussion.section || 'Class');
+  const firstName = escapeHtmlForEmail(studentName.split(' ')[0]);
+  const feedback = escapeHtmlForEmail(discussion.group_feedback || 'No feedback available.')
+    .split('\n\n').join('</p><p>');
 
   return `
 <!DOCTYPE html>
@@ -91,10 +112,10 @@ function generateGroupFeedbackEmailHtml(discussion, studentName) {
   </div>
 
   <div class="content">
-    <p style="margin-bottom: 20px;">Hi ${studentName.split(' ')[0]},</p>
+    <p style="margin-bottom: 20px;">Hi ${firstName},</p>
 
     <div class="section feedback">
-      <p>${(discussion.group_feedback || 'No feedback available.').split('\n\n').join('</p><p>')}</p>
+      <p>${feedback}</p>
     </div>
   </div>
 
@@ -141,8 +162,11 @@ If you have questions, please speak with your teacher.
  * @returns {string} HTML email body
  */
 function generateIndividualFeedbackEmailHtml(report, discussion, studentName) {
-  const date = discussion.date || 'Recent Discussion';
-  const period = discussion.section || 'Class';
+  const date = escapeHtmlForEmail(discussion.date || 'Recent Discussion');
+  const period = escapeHtmlForEmail(discussion.section || 'Class');
+  const firstName = escapeHtmlForEmail(studentName.split(' ')[0]);
+  const feedback = escapeHtmlForEmail(report.feedback || 'Great participation! Keep up the good work.')
+    .split('\n\n').join('</p><p>');
 
   return `
 <!DOCTYPE html>
@@ -215,10 +239,10 @@ function generateIndividualFeedbackEmailHtml(report, discussion, studentName) {
   </div>
 
   <div class="content">
-    <p style="margin-bottom: 20px;">Hi ${studentName.split(' ')[0]},</p>
+    <p style="margin-bottom: 20px;">Hi ${firstName},</p>
 
     <div class="section feedback">
-      <p>${(report.feedback || 'Great participation! Keep up the good work.').split('\n\n').join('</p><p>')}</p>
+      <p>${feedback}</p>
     </div>
   </div>
 

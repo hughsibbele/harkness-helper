@@ -14,14 +14,29 @@
  */
 
 // ============================================================================
+// CONSTANTS
+// ============================================================================
+
+/** Auto-stop processing after this many minutes */
+const PROCESSING_TIMEOUT_MINUTES = 60;
+
+// ============================================================================
 // MENU & UI
 // ============================================================================
 
 /**
- * Create custom menu when spreadsheet opens
+ * Create custom menu when spreadsheet opens.
+ * Shows minimal menu before setup, full menu after.
  */
 function onOpen() {
   const ui = SpreadsheetApp.getUi();
+
+  if (!isSetupComplete()) {
+    ui.createMenu('Harkness Helper')
+      .addItem('Setup Wizard (start here)', 'showSetupWizard')
+      .addToUi();
+    return;
+  }
 
   // Check multi-course mode safely — onOpen() runs as a simple trigger
   // where PropertiesService may not be available
@@ -29,7 +44,6 @@ function onOpen() {
   try {
     multiCourse = isMultiCourseMode();
   } catch (e) {
-    // Fall back to checking the active spreadsheet directly
     try {
       const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Courses');
       if (sheet && sheet.getLastRow() > 1) multiCourse = true;
@@ -39,14 +53,14 @@ function onOpen() {
   }
 
   const menu = ui.createMenu('Harkness Helper')
-    .addItem('Setup Folders', 'setupDriveFolders')
-    .addItem('Initialize Sheets', 'initializeAllSheets')
-    .addItem('Check Configuration', 'showConfigStatus')
+    .addItem('Start Processing', 'menuStartProcessing')
+    .addItem('Stop Processing', 'menuStopProcessing')
+    .addItem('Process New Files Now', 'menuProcessNewFiles')
     .addSeparator()
-    .addItem('Process New Files', 'menuProcessNewFiles')
     .addItem('Generate Feedback', 'menuGenerateFeedback')
     .addItem('Send Approved Feedback', 'menuSendApprovedFeedback')
     .addSeparator()
+    .addItem('Configure Canvas Course', 'showCanvasConfigDialog')
     .addItem('Sync Canvas Roster', 'menuSyncCanvasRoster')
     .addItem('Fetch Canvas Course Data', 'menuFetchCanvasCourseData');
 
@@ -56,16 +70,147 @@ function onOpen() {
 
   menu.addSeparator()
     .addItem('Reorder & Format Sheets', 'menuReorderColumns')
-    .addItem('Setup Automatic Triggers', 'setupTriggers')
-    .addItem('Remove All Triggers', 'removeAllTriggers');
+    .addItem('Check Configuration', 'showConfigStatus');
 
   if (!multiCourse) {
     menu.addSeparator()
       .addItem('Enable Multi-Course', 'menuEnableMultiCourse');
   }
 
+  menu.addSeparator()
+    .addItem('Re-run Setup Wizard', 'showSetupWizard');
+
   menu.addToUi();
 }
+
+// ============================================================================
+// SETUP WIZARD
+// ============================================================================
+
+/**
+ * Show the Setup Wizard dialog.
+ * Collects ElevenLabs and Gemini API keys, then auto-configures everything.
+ */
+function showSetupWizard() {
+  const props = PropertiesService.getScriptProperties().getProperties();
+
+  // Escape HTML special characters to prevent XSS via stored property values
+  const escapeHtml = (str) => String(str || '')
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+
+  const existingElevenlabs = escapeHtml(props['ELEVENLABS_API_KEY']);
+  const existingGemini = escapeHtml(props['GEMINI_API_KEY']);
+
+  const html = HtmlService.createHtmlOutput(`
+    <style>
+      body { font-family: Arial, sans-serif; padding: 20px; color: #333; }
+      h2 { color: #1a73e8; margin-top: 0; }
+      label { display: block; margin-top: 16px; font-weight: bold; font-size: 14px; }
+      input { width: 100%; padding: 8px; margin-top: 4px; border: 1px solid #ccc;
+              border-radius: 4px; font-size: 14px; box-sizing: border-box; }
+      .help { font-size: 12px; color: #666; margin-top: 2px; }
+      button { margin-top: 24px; padding: 10px 24px; background: #1a73e8; color: white;
+               border: none; border-radius: 4px; font-size: 14px; cursor: pointer; width: 100%; }
+      button:hover { background: #1557b0; }
+      button:disabled { background: #ccc; cursor: default; }
+      .error { color: #d93025; margin-top: 8px; font-size: 13px; }
+      .success { color: #188038; margin-top: 8px; font-size: 13px; }
+    </style>
+
+    <h2>Harkness Helper Setup</h2>
+    <p>Enter your API keys below. Everything else is configured automatically.</p>
+
+    <label for="elevenlabs">ElevenLabs API Key</label>
+    <input type="password" id="elevenlabs" value="${existingElevenlabs}"
+           placeholder="Enter your ElevenLabs API key">
+    <div class="help">Get one at <b>elevenlabs.io</b> → Profile → API Keys</div>
+
+    <label for="gemini">Gemini API Key</label>
+    <input type="password" id="gemini" value="${existingGemini}"
+           placeholder="Enter your Gemini API key">
+    <div class="help">Get one at <b>aistudio.google.com</b> → API Keys</div>
+
+    <div id="status"></div>
+
+    <button id="btn" onclick="runSetup()">Run Setup</button>
+
+    <script>
+      function runSetup() {
+        var elevenlabs = document.getElementById('elevenlabs').value.trim();
+        var gemini = document.getElementById('gemini').value.trim();
+        var status = document.getElementById('status');
+        var btn = document.getElementById('btn');
+
+        if (!elevenlabs || !gemini) {
+          status.className = 'error';
+          status.textContent = 'Both API keys are required.';
+          return;
+        }
+
+        btn.disabled = true;
+        btn.textContent = 'Setting up...';
+        status.className = '';
+        status.textContent = 'Creating folders, initializing sheets...';
+
+        google.script.run
+          .withSuccessHandler(function(result) {
+            status.className = 'success';
+            status.innerHTML = '<b>Setup complete!</b><br><br>' +
+              'Next steps:<br>' +
+              '1. Upload audio files to the <b>Harkness Helper / Upload</b> folder in your Google Drive<br>' +
+              '2. Click <b>Harkness Helper → Start Processing</b><br>' +
+              '3. Customize the <b>Settings</b> sheet (mode, distribution, etc.)<br><br>' +
+              'Refresh this page to see the full menu.';
+            btn.textContent = 'Done!';
+          })
+          .withFailureHandler(function(err) {
+            status.className = 'error';
+            status.textContent = 'Error: ' + err.message;
+            btn.disabled = false;
+            btn.textContent = 'Run Setup';
+          })
+          .runSetupWizard({ elevenlabs: elevenlabs, gemini: gemini });
+      }
+    </script>
+  `).setWidth(480).setHeight(480);
+
+  SpreadsheetApp.getUi().showModalDialog(html, 'Setup Wizard');
+}
+
+/**
+ * Server-side handler for the Setup Wizard.
+ * Auto-captures spreadsheet ID, stores API keys, creates Drive folders,
+ * and initializes all sheets/settings/prompts.
+ *
+ * @param {Object} config - {elevenlabs, gemini}
+ * @returns {Object} {success: true}
+ */
+function runSetupWizard(config) {
+  // 1. Auto-capture spreadsheet ID
+  const ssId = SpreadsheetApp.getActiveSpreadsheet().getId();
+  setProperty('SPREADSHEET_ID', ssId);
+
+  // 2. Store API keys
+  setProperty('ELEVENLABS_API_KEY', config.elevenlabs);
+  setProperty('GEMINI_API_KEY', config.gemini);
+
+  // 3. Create Drive folders (stores AUDIO_FOLDER_ID and PROCESSING_FOLDER_ID)
+  setupDriveFolders();
+
+  // 4. Initialize spreadsheet structure
+  initializeAllSheets();
+  formatSheets();
+  initializeSettings();
+  initializeDefaultPrompts();
+
+  Logger.log('Setup Wizard completed successfully');
+  return { success: true };
+}
+
+// ============================================================================
+// CONFIGURATION STATUS
+// ============================================================================
 
 /**
  * Show configuration status dialog
@@ -78,6 +223,7 @@ function showConfigStatus() {
   if (validation.valid) {
     message = 'All required configuration is set!\n\n';
     message += 'Mode: ' + getMode() + '\n';
+    message += 'Gemini model: ' + (getSetting('gemini_model') || 'gemini-2.0-flash') + '\n';
     message += 'Email distribution: ' + getSetting('distribute_email') + '\n';
     message += 'Canvas distribution: ' + getSetting('distribute_canvas') + '\n';
     message += 'Canvas integration: ' + (isCanvasConfigured() ? 'Configured' : 'Not configured') + '\n';
@@ -95,10 +241,77 @@ function showConfigStatus() {
   } else {
     message = 'Missing required configuration:\n\n';
     message += validation.missing.map(k => '- ' + k).join('\n');
-    message += '\n\nPlease add these in Project Settings > Script Properties.';
+    message += '\n\nPlease run the Setup Wizard from the Harkness Helper menu.';
   }
 
   ui.alert('Configuration Status', message, ui.ButtonSet.OK);
+}
+
+// ============================================================================
+// AUTO-OFF TRIGGER SYSTEM
+// ============================================================================
+
+/**
+ * Start processing: install trigger and run immediately.
+ * Removes any existing processing triggers first to prevent duplicates.
+ */
+function menuStartProcessing() {
+  const ui = SpreadsheetApp.getUi();
+
+  try {
+    // Remove any existing processing triggers
+    removeProcessingTriggers();
+
+    // Record start time
+    setProperty('PROCESSING_START_TIME', new Date().toISOString());
+
+    // Install 10-minute trigger
+    ScriptApp.newTrigger('mainProcessingLoop')
+      .timeBased()
+      .everyMinutes(CONFIG.TRIGGERS.MAIN_LOOP)
+      .create();
+
+    // Run immediately
+    mainProcessingLoop();
+
+    ui.alert('Processing Started',
+      'Processing is now running and will check for new files every 10 minutes.\n\n' +
+      'It will automatically stop after ' + PROCESSING_TIMEOUT_MINUTES + ' minutes.\n\n' +
+      'Upload audio files to your Harkness Helper / Upload folder in Google Drive.',
+      ui.ButtonSet.OK);
+  } catch (e) {
+    ui.alert('Error', e.message, ui.ButtonSet.OK);
+  }
+}
+
+/**
+ * Stop processing: remove trigger and clear start time.
+ */
+function menuStopProcessing() {
+  const ui = SpreadsheetApp.getUi();
+  removeProcessingTriggers();
+
+  const props = PropertiesService.getScriptProperties();
+  props.deleteProperty('PROCESSING_START_TIME');
+
+  ui.alert('Processing Stopped',
+    'Automatic processing has been stopped.',
+    ui.ButtonSet.OK);
+}
+
+/**
+ * Remove only mainProcessingLoop triggers (not all project triggers).
+ */
+function removeProcessingTriggers() {
+  const triggers = ScriptApp.getProjectTriggers();
+  let removed = 0;
+  for (const trigger of triggers) {
+    if (trigger.getHandlerFunction() === 'mainProcessingLoop') {
+      ScriptApp.deleteTrigger(trigger);
+      removed++;
+    }
+  }
+  Logger.log(`Removed ${removed} processing trigger(s)`);
 }
 
 // ============================================================================
@@ -106,9 +319,27 @@ function showConfigStatus() {
 // ============================================================================
 
 /**
- * Main trigger function — runs periodically to process work
+ * Main trigger function — runs periodically to process work.
+ * Auto-stops after PROCESSING_TIMEOUT_MINUTES.
  */
 function mainProcessingLoop() {
+  // Check elapsed time — auto-stop if past timeout
+  const props = PropertiesService.getScriptProperties();
+  const startTime = props.getProperty('PROCESSING_START_TIME');
+  if (!startTime) {
+    // Orphaned trigger — no start time recorded. Remove it.
+    Logger.log('No PROCESSING_START_TIME found. Removing orphaned trigger.');
+    removeProcessingTriggers();
+    return;
+  }
+  const elapsed = (Date.now() - new Date(startTime).getTime()) / 60000;
+  if (elapsed >= PROCESSING_TIMEOUT_MINUTES) {
+    Logger.log(`Processing timeout reached (${Math.round(elapsed)} minutes). Auto-stopping.`);
+    removeProcessingTriggers();
+    props.deleteProperty('PROCESSING_START_TIME');
+    return;
+  }
+
   Logger.log('=== Starting main processing loop ===');
 
   try {
@@ -455,14 +686,19 @@ function sendApprovedFeedback() {
     }
 
     // Send emails
+    let discussionFailed = 0;
+    const discussionErrors = [];
+
     if (emailEnabled) {
       try {
         const emailResult = sendAllReportsForDiscussion(discussionId);
         totalEmailsSent += emailResult.sent;
-        totalFailed += emailResult.failed;
+        discussionFailed += emailResult.failed;
+        discussionErrors.push(...emailResult.errors);
       } catch (e) {
         Logger.log(`Email error for ${discussionId}: ${e.message}`);
-        totalFailed++;
+        discussionFailed++;
+        discussionErrors.push(`Email error: ${e.message}`);
       }
     }
 
@@ -471,18 +707,32 @@ function sendApprovedFeedback() {
       try {
         const canvasResult = postGradesForDiscussion(discussionId);
         totalCanvasPosted += canvasResult.success;
-        totalFailed += canvasResult.failed;
+        discussionFailed += canvasResult.failed;
+        discussionErrors.push(...canvasResult.errors);
       } catch (e) {
         Logger.log(`Canvas error for ${discussionId}: ${e.message}`);
-        totalFailed++;
+        discussionFailed++;
+        discussionErrors.push(`Canvas error: ${e.message}`);
       }
     }
 
-    // Update status
-    updateDiscussion(discussionId, {
-      status: CONFIG.STATUS.SENT,
-      next_step: 'Feedback sent!'
-    });
+    totalFailed += discussionFailed;
+
+    // Only mark 'sent' if all deliveries succeeded
+    if (discussionFailed === 0) {
+      updateDiscussion(discussionId, {
+        status: CONFIG.STATUS.SENT,
+        next_step: 'Feedback sent!'
+      });
+    } else {
+      const timestamp = new Date().toISOString();
+      const existingErrors = discussion.error_message || '';
+      const newError = `[${timestamp}] Partial send failure (${discussionFailed} failed): ${discussionErrors.join('; ')}`;
+      updateDiscussion(discussionId, {
+        next_step: `Send incomplete — ${discussionFailed} failed. Re-run Send to retry.`,
+        error_message: existingErrors ? existingErrors + '\n' + newError : newError
+      });
+    }
   }
 
   return {
@@ -518,6 +768,91 @@ function checkStuckTranscriptions() {
         error_message: `[${timestamp}] Transcription timed out after ${Math.round(elapsed / 60000)} minutes. Try splitting the audio file into shorter segments.`
       });
     }
+  }
+}
+
+// ============================================================================
+// CANVAS CONFIGURATION
+// ============================================================================
+
+/**
+ * 3-step prompt dialog for Canvas course configuration.
+ * Stores credentials, sets course ID, and auto-syncs all rosters.
+ */
+function showCanvasConfigDialog() {
+  const ui = SpreadsheetApp.getUi();
+  const props = PropertiesService.getScriptProperties().getProperties();
+
+  // Step 1: Canvas base URL
+  const existingUrl = props['CANVAS_BASE_URL'] || getSetting('canvas_base_url') || '';
+  const urlResponse = ui.prompt('Configure Canvas Course (Step 1 of 3)',
+    'Enter your Canvas base URL:\n(e.g., https://yourschool.instructure.com)' +
+    (existingUrl ? '\n\nCurrent: ' + existingUrl : ''),
+    ui.ButtonSet.OK_CANCEL);
+  if (urlResponse.getSelectedButton() !== ui.Button.OK) return;
+  const baseUrl = urlResponse.getResponseText().trim().replace(/\/$/, '') || existingUrl;
+  if (!baseUrl) {
+    ui.alert('Error', 'Canvas base URL is required.', ui.ButtonSet.OK);
+    return;
+  }
+
+  // Step 2: API token
+  const existingToken = props['CANVAS_API_TOKEN'] ? '(already set)' : '';
+  const tokenResponse = ui.prompt('Configure Canvas Course (Step 2 of 3)',
+    'Enter your Canvas API token:\n(Generate at Canvas → Account → Settings → New Access Token)' +
+    (existingToken ? '\n\nLeave blank to keep existing token.' : ''),
+    ui.ButtonSet.OK_CANCEL);
+  if (tokenResponse.getSelectedButton() !== ui.Button.OK) return;
+  const token = tokenResponse.getResponseText().trim();
+  if (!token && !props['CANVAS_API_TOKEN']) {
+    ui.alert('Error', 'Canvas API token is required.', ui.ButtonSet.OK);
+    return;
+  }
+
+  // Step 3: Course ID
+  const existingCourseId = getSetting('canvas_course_id') || '';
+  const courseResponse = ui.prompt('Configure Canvas Course (Step 3 of 3)',
+    'Enter the Canvas course ID:\n(Find it in the URL: canvas.school.edu/courses/12345 → 12345)' +
+    (existingCourseId ? '\n\nCurrent: ' + existingCourseId : ''),
+    ui.ButtonSet.OK_CANCEL);
+  if (courseResponse.getSelectedButton() !== ui.Button.OK) return;
+  const courseId = courseResponse.getResponseText().trim() || existingCourseId;
+  if (!courseId) {
+    ui.alert('Error', 'Course ID is required.', ui.ButtonSet.OK);
+    return;
+  }
+
+  // Store configuration
+  setProperty('CANVAS_BASE_URL', baseUrl);
+  if (token) {
+    setProperty('CANVAS_API_TOKEN', token);
+  }
+  setSetting('canvas_base_url', baseUrl);
+  setSetting('canvas_course_id', courseId);
+  setSetting('distribute_canvas', 'true');
+
+  // Auto-sync all rosters
+  try {
+    const sections = getCanvasSections(courseId);
+    const sectionMap = {};
+    for (const section of sections) {
+      sectionMap[section.id] = section.name;
+    }
+
+    const fallbackSection = sections.length === 1 ? sections[0].name : '';
+    const count = syncCanvasStudents(courseId, fallbackSection, sectionMap);
+
+    ui.alert('Canvas Configured',
+      `Canvas course configured and roster synced!\n\n` +
+      `Synced ${count} students from ${sections.length} section(s).\n` +
+      `Sections: ${sections.map(s => s.name).join(', ')}\n\n` +
+      `To switch courses or re-sync, run this dialog again.`,
+      ui.ButtonSet.OK);
+  } catch (e) {
+    ui.alert('Partial Success',
+      'Canvas credentials saved, but roster sync failed:\n' + e.message +
+      '\n\nCheck your API token and course ID, then try again.',
+      ui.ButtonSet.OK);
   }
 }
 
@@ -576,7 +911,7 @@ function menuSyncCanvasRoster() {
 
   if (!isCanvasConfigured()) {
     ui.alert('Canvas Not Configured',
-      'Please add CANVAS_API_TOKEN and CANVAS_BASE_URL to Script Properties.',
+      'Please configure Canvas first via Harkness Helper → Configure Canvas Course.',
       ui.ButtonSet.OK);
     return;
   }
@@ -618,11 +953,11 @@ function menuSyncCanvasRoster() {
     return;
   }
 
-  // Single-course mode: existing behavior
+  // Single-course mode
   const courseId = getSetting('canvas_course_id');
   if (!courseId) {
     ui.alert('No Course ID',
-      'Please set canvas_course_id in the Settings sheet.',
+      'Please set canvas_course_id in the Settings sheet or use Configure Canvas Course.',
       ui.ButtonSet.OK);
     return;
   }
@@ -651,7 +986,7 @@ function menuFetchCanvasCourseData() {
 
   if (!isCanvasConfigured()) {
     ui.alert('Canvas Not Configured',
-      'Please add CANVAS_API_TOKEN and CANVAS_BASE_URL to Script Properties.',
+      'Please configure Canvas first via Harkness Helper → Configure Canvas Course.',
       ui.ButtonSet.OK);
     return;
   }
@@ -697,7 +1032,7 @@ function menuFetchCanvasCourseData() {
       return;
     }
   } else {
-    // Single-course mode: existing behavior
+    // Single-course mode
     courseId = getSetting('canvas_course_id');
     if (!courseId) {
       const response = ui.prompt('Canvas Course ID',
@@ -784,7 +1119,7 @@ function menuSyncAllCourseRosters() {
 
   if (!isCanvasConfigured()) {
     ui.alert('Canvas Not Configured',
-      'Please add CANVAS_API_TOKEN and CANVAS_BASE_URL to Script Properties.',
+      'Please configure Canvas first via Harkness Helper → Configure Canvas Course.',
       ui.ButtonSet.OK);
     return;
   }
@@ -873,143 +1208,4 @@ function menuReorderColumns() {
   } catch (e) {
     ui.alert('Error', e.message, ui.ButtonSet.OK);
   }
-}
-
-// ============================================================================
-// TRIGGER MANAGEMENT
-// ============================================================================
-
-/**
- * Setup time-based triggers for automatic processing
- */
-function setupTriggers() {
-  removeAllTriggers();
-
-  ScriptApp.newTrigger('mainProcessingLoop')
-    .timeBased()
-    .everyMinutes(CONFIG.TRIGGERS.MAIN_LOOP)
-    .create();
-
-  Logger.log('Triggers created successfully');
-  SpreadsheetApp.getUi().alert(
-    'Triggers Setup',
-    `Automatic processing enabled.\nMain loop runs every ${CONFIG.TRIGGERS.MAIN_LOOP} minutes.`,
-    SpreadsheetApp.getUi().ButtonSet.OK
-  );
-}
-
-/**
- * Remove all project triggers
- */
-function removeAllTriggers() {
-  const triggers = ScriptApp.getProjectTriggers();
-  for (const trigger of triggers) {
-    ScriptApp.deleteTrigger(trigger);
-  }
-  Logger.log(`Removed ${triggers.length} triggers`);
-}
-
-// ============================================================================
-// SETUP & INITIALIZATION
-// ============================================================================
-
-/**
- * One-time setup function — run this first!
- */
-function initialSetup() {
-  Logger.log('=== Running initial setup ===');
-
-  // 1. Setup script properties
-  setupScriptProperties();
-
-  // 2. Create Drive folders
-  const folders = setupDriveFolders();
-  Logger.log(`Created folders: ${JSON.stringify(folders)}`);
-
-  // 3. Create spreadsheet structure
-  try {
-    initializeAllSheets();
-    formatSheets();
-    initializeSettings();
-    initializeDefaultPrompts();
-  } catch (e) {
-    Logger.log('Could not initialize sheets (run from spreadsheet): ' + e.message);
-  }
-
-  Logger.log('=== Initial setup complete ===');
-  Logger.log('Next steps:');
-  Logger.log('1. Add API keys in Project Settings > Script Properties');
-  Logger.log('2. Set SPREADSHEET_ID to your tracking spreadsheet');
-  Logger.log('3. Configure Settings sheet (mode, distribution, etc.)');
-  Logger.log('4. Run setupTriggers() to enable automatic processing');
-  Logger.log(`5. Upload audio files to: ${getUploadFolderUrl()}`);
-}
-
-/**
- * Test the configuration by making test API calls
- */
-function testConfiguration() {
-  const results = [];
-
-  // Test ElevenLabs
-  try {
-    getElevenLabsKey();
-    results.push('ElevenLabs API key: configured');
-  } catch (e) {
-    results.push('ElevenLabs: ' + e.message);
-  }
-
-  // Test Gemini
-  try {
-    getGeminiKey();
-    const response = callGemini('Say "Hello" in exactly one word.');
-    results.push('Gemini API: working');
-  } catch (e) {
-    results.push('Gemini: ' + e.message);
-  }
-
-  // Test Canvas (if configured)
-  if (isCanvasConfigured()) {
-    try {
-      let courseId = getSetting('canvas_course_id');
-      if (!courseId && isMultiCourseMode()) {
-        const courses = getAllCourses();
-        if (courses.length > 0) courseId = String(courses[0].canvas_course_id);
-      }
-      if (courseId) {
-        canvasRequest(`/courses/${courseId}`);
-        results.push('Canvas API: working' + (isMultiCourseMode() ? ' (multi-course)' : ''));
-      } else {
-        results.push('Canvas: Course ID not set in Settings or Courses sheet');
-      }
-    } catch (e) {
-      results.push('Canvas: ' + e.message);
-    }
-  } else {
-    results.push('Canvas: Not configured (optional)');
-  }
-
-  // Test Drive folders
-  try {
-    const uploadId = getAudioFolderId();
-    const processingId = getProcessingFolderId();
-    DriveApp.getFolderById(uploadId);
-    DriveApp.getFolderById(processingId);
-    results.push('Drive folders: accessible');
-  } catch (e) {
-    results.push('Drive folders: ' + e.message);
-  }
-
-  // Test Settings sheet
-  try {
-    const mode = getMode();
-    results.push('Settings sheet: OK (mode=' + mode + ')');
-  } catch (e) {
-    results.push('Settings sheet: ' + e.message);
-  }
-
-  Logger.log('=== Configuration Test Results ===');
-  results.forEach(r => Logger.log(r));
-
-  return results;
 }

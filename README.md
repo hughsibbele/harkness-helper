@@ -1,22 +1,99 @@
 # Harkness Discussion Helper
 
-A Google Apps Script application that automates the workflow for Harkness discussions: recording transcription with speaker identification, AI-powered feedback generation, Canvas integration for grade posting, and email distribution to students.
+**Automates Harkness discussion workflows.** Upload a recording, get a transcript with speaker identification, AI-generated feedback, and distribute results via email or Canvas.
 
-## Features
+Built on Google Sheets + Google Apps Script. Free to run (you provide your own API keys).
 
-- **Automatic Transcription**: Upload audio recordings to Google Drive and get them automatically transcribed with speaker diarization (ElevenLabs Scribe v2). When a synced roster exists, the expected speaker count is passed to ElevenLabs for more accurate diarization.
-- **Speaker Identification**: Gemini 2.0 Flash identifies students from their introductions ("Hi, I'm...")
-- **Two Grading Modes**: Group mode (one grade for the whole class) or Individual mode (per-student grades and feedback)
-- **AI Feedback Generation**: Gemini generates 2-paragraph feedback using a critique sandwich format, editable by the teacher before sending
-- **Canvas Integration**: Sync student roster, post grades and feedback (supports assignments and discussion topics, multi-section)
-- **Email Distribution**: Send personalized HTML reports to students via Gmail
-- **Teacher Review**: Review and approve everything in Google Sheets before sending
-- **Editable Prompts**: All AI prompts live in a Prompts sheet — teachers can customize tone, criteria, and style without touching code
+---
+
+## What You Need Before Starting
+
+You'll need two API keys (takes ~5 minutes to get both):
+
+1. **ElevenLabs API key** (for transcription) — sign up at [elevenlabs.io](https://elevenlabs.io)
+   - Go to Profile (bottom-left) > API Keys
+   - Transcription costs ~$0.37/hour of audio
+
+2. **Google Gemini API key** (for speaker ID and feedback) — get one free at [aistudio.google.com](https://aistudio.google.com)
+   - The free tier is sufficient for typical classroom use
+
+---
+
+## Setup Guide (5 minutes)
+
+### Step 1: Copy the Spreadsheet
+
+1. Click this link: **[Make a copy of Harkness Helper](https://docs.google.com/spreadsheets/d/1eO3PXxVS_e9TF6e83tVshmbCcWrBqN-nMwAr1WdKRQA/copy)**
+2. Click **Make a copy** when prompted
+
+You now have your own spreadsheet with 8 tabs: Settings, Discussions, Students, Transcripts, SpeakerMap, StudentReports, Prompts, and Courses.
+
+### Step 2: Add the Code
+
+1. In your spreadsheet, go to **Extensions > Apps Script**
+2. This opens the script editor in a new tab
+3. Delete any code already in the editor
+4. For each `.gs` file in the `src/` folder of this repository (`Code.gs`, `Config.gs`, `Sheets.gs`, `Prompts.gs`, `ElevenLabs.gs`, `Gemini.gs`, `Canvas.gs`, `DriveMonitor.gs`, `Email.gs`, `Webapp.gs`):
+   > There are 10 script files total. No HTML files go in the script editor — the recorder frontend is hosted on GitHub Pages separately.
+   - Click the **+** next to "Files" in the left sidebar, choose **Script**, and name it to match (e.g., `Config`)
+   - Copy the file contents and paste them in
+5. In the script editor, click the gear icon (**Project Settings**) on the left sidebar
+   - Check **"Show 'appsscript.json' manifest file in editor"**
+   - Go back to the Editor, open `appsscript.json`, and replace its contents with the `appsscript.json` from this repository
+6. Click **Save** (or Ctrl+S)
+
+### Step 3: Run the Setup Wizard
+
+1. Go back to your **spreadsheet** tab (not the script editor)
+2. Refresh the page — wait a few seconds for the menu to appear
+3. Click **Harkness Helper > Setup Wizard (start here)**
+4. Google will ask you to authorize the script — click through the permissions prompts
+   - You may see a "This app isn't verified" warning. Click **Advanced > Go to [project name]** to continue. This is your own script running on your own account — it's safe.
+5. Enter your ElevenLabs API key and Gemini API key
+6. Click **Run Setup**
+
+The wizard automatically creates your Drive folders (`Harkness Helper / Upload` and `Harkness Helper / Processing`) and initializes all sheets.
+
+---
+
+## How to Use
+
+### 1. Upload Audio
+
+Upload your discussion recording (mp3, m4a, wav, etc.) to the **Harkness Helper / Upload** folder in your Google Drive.
+
+**Tip:** Name files like `Section 3 - 2025-01-15.m4a` and the section and date will be auto-detected.
+
+### 2. Start Processing
+
+Click **Harkness Helper > Start Processing**. This:
+- Immediately checks for new files
+- Installs a 10-minute background trigger to keep checking
+- Automatically stops after 60 minutes (no runaway triggers)
+
+### 3. Generate Feedback
+
+After transcription completes (check the Discussions sheet for status):
+1. Enter a grade in the **grade** column on the Discussions sheet
+2. Click **Harkness Helper > Generate Feedback**
+3. Gemini generates feedback based on the transcript and grade
+
+### 4. Review and Approve
+
+1. Read the generated feedback in the **group_feedback** column
+2. Edit if needed
+3. Check the **approved** checkbox
+
+### 5. Send
+
+Click **Harkness Helper > Send Approved Feedback** to distribute via email and/or Canvas.
+
+---
 
 ## Architecture
 
 ```
-Phone Recording → Google Drive (Upload folder)
+Phone Recording or Manual Upload → Google Drive (Upload folder)
     → ElevenLabs Scribe v2 (synchronous transcription + speaker diarization)
     → Google Gemini (speaker ID from introductions)
     → Teacher reviews speaker map in SpeakerMap sheet
@@ -33,142 +110,29 @@ uploaded → transcribing → mapping → review → approved → sent
                                                         ↘ error (from any step)
 ```
 
-## Setup Instructions
+- `uploaded → transcribing`: automatic (trigger detects file, starts ElevenLabs)
+- `transcribing → mapping`: automatic (transcription complete, Gemini suggests speaker names)
+- `mapping → review`: group mode auto-advances; individual mode waits for teacher to confirm speaker map
+- `review → approved`: teacher enters grade(s), reviews feedback, checks approved checkbox(es)
+- `approved → sent`: teacher clicks "Send Approved Feedback" from menu
 
-### 1. Create the Google Apps Script Project
+### Source Files
 
-1. Go to [script.google.com](https://script.google.com) and create a new project
-2. Delete the default `Code.gs` content
-3. Create files for each `.gs` file in the `src/` folder:
-   - `Code.gs` — Entry point: menu, triggers, processing loop, feedback generation, send orchestration
-   - `Config.gs` — Global config, Script Properties access, mode helpers, validation
-   - `Sheets.gs` — Generic CRUD layer over Google Sheets (the "database")
-   - `Prompts.gs` — Sheet-based prompt system with default fallbacks
-   - `ElevenLabs.gs` — Synchronous transcription via ElevenLabs Scribe v2
-   - `Gemini.gs` — Gemini 2.0 Flash API: speaker ID, feedback generation, contribution extraction
-   - `Canvas.gs` — Canvas LMS API: roster sync, grade posting, course data fetch
-   - `DriveMonitor.gs` — Upload folder monitoring, filename parsing
-   - `Email.gs` — HTML/plaintext email templates and distribution
-   - `Webapp.gs` — Web app entry point and audio upload handler
-4. Create one HTML file:
-   - `RecorderApp.html` — Mobile recording UI (create via File > New > HTML file)
-5. Copy the content from each file in this repository
-6. Update `appsscript.json` (View > Show manifest file) with the contents from this repo
+| File | Role |
+|------|------|
+| `Code.gs` | Entry point: conditional menu, Setup Wizard, auto-off trigger system, Canvas config dialog, processing pipeline, feedback generation, send orchestration |
+| `Config.gs` | `CONFIG` constant, `isSetupComplete()`, Script Properties access, mode helpers, validation |
+| `Sheets.gs` | Generic CRUD layer over Google Sheets (the "database"), plus domain-specific helpers for all 8 sheets |
+| `Prompts.gs` | Sheet-based prompt system with `DEFAULT_PROMPTS` fallback; `getPrompt(name, {vars})` reads from Prompts sheet |
+| `ElevenLabs.gs` | Synchronous transcription via ElevenLabs Scribe v2, blob vs URL upload based on file size, Drive file sharing |
+| `Gemini.gs` | Gemini API calls (default: gemini-2.0-flash), speaker ID, group/individual feedback generation |
+| `Canvas.gs` | Canvas LMS API: paginated requests, student sync, dual-mode grade posting, course data fetch |
+| `DriveMonitor.gs` | Upload folder monitoring, filename parsing (section + course + date extraction), folder setup |
+| `Email.gs` | Dual-mode HTML/plaintext email templates with HTML escaping, distribution |
+| `Webapp.gs` | Web app API backend: `doGet()`/`doPost()` handle config and upload requests from the GitHub Pages frontend |
+| `docs/index.html` | Mobile-first recording UI hosted on GitHub Pages (HTML/CSS/JS, no external deps). Not in GAS. |
 
-### 2. Create the Tracking Spreadsheet
-
-1. Import `template.xlsx` into Google Sheets (File > Import), or create a new spreadsheet manually
-2. Copy the spreadsheet ID from the URL (the long string between `/d/` and `/edit`)
-3. Save this ID for configuration
-
-### 3. Get API Keys
-
-#### ElevenLabs
-1. Sign up at [elevenlabs.io](https://elevenlabs.io/)
-2. Go to your Profile and copy your API key
-3. Used for: Scribe v2 speech-to-text with speaker diarization
-
-#### Google Gemini
-1. Go to [AI Studio](https://aistudio.google.com/app/apikey)
-2. Create an API key
-3. Cost: Free tier is generous for this use case
-
-#### Canvas (Optional)
-1. In Canvas, go to Account > Settings
-2. Click "+ New Access Token"
-3. Give it a purpose (e.g., "Harkness Helper")
-4. Copy the token (you won't see it again!)
-
-### 4. Configure Script Properties
-
-In the Apps Script editor:
-1. Click ⚙️ Project Settings
-2. Scroll to "Script Properties"
-3. Add these properties:
-
-| Property | Description | Required |
-|----------|-------------|----------|
-| `ELEVENLABS_API_KEY` | Your ElevenLabs API key | Yes |
-| `GEMINI_API_KEY` | Your Gemini API key | Yes |
-| `SPREADSHEET_ID` | ID of your tracking spreadsheet | Yes |
-| `AUDIO_FOLDER_ID` | Set automatically by setup | Yes |
-| `PROCESSING_FOLDER_ID` | Set automatically by setup | Yes |
-| `CANVAS_API_TOKEN` | Your Canvas access token | Optional |
-| `CANVAS_BASE_URL` | Your Canvas URL (e.g., `https://school.instructure.com`) | Optional |
-
-### 5. Run Initial Setup
-
-1. In the Apps Script editor, select `initialSetup` from the function dropdown
-2. Click ▶️ Run
-3. Authorize the app when prompted
-4. Check the logs for the folder URLs
-
-### 6. Setup Automatic Triggers
-
-1. Open your tracking spreadsheet
-2. You should see a "Harkness Helper" menu
-3. Click "Setup Automatic Triggers"
-
-### 7. Deploy the Recording Web App (Optional)
-
-The recorder lets you record and upload discussions directly from your phone's browser.
-
-**Important:** The recorder uses `navigator.mediaDevices.getUserMedia()` for microphone access. Apps Script's sandboxed iframe does not grant microphone permissions, so the recorder UI (`RecorderApp.html`) must be hosted on **GitHub Pages** (or another host you control). Apps Script serves only as the backend API.
-
-#### Deploy the Apps Script backend
-
-1. In the Apps Script editor, click **Deploy > New deployment**
-2. Select type: **Web app**
-3. Execute as: **Me**
-4. Who has access: **Anyone** (so the GitHub Pages frontend can reach it)
-5. Click **Deploy** and copy the deployment URL
-
-#### Host the recorder on GitHub Pages
-
-1. Copy `src/RecorderApp.html` to your GitHub Pages site (e.g., `docs/RecorderApp.html` or the repo root)
-2. Open the file and update the `APPS_SCRIPT_URL` variable near the top of the `<script>` block with your deployment URL:
-   ```javascript
-   var APPS_SCRIPT_URL = "https://script.google.com/macros/s/YOUR_DEPLOYMENT_ID/exec";
-   ```
-3. Push to GitHub and enable GitHub Pages in the repository settings
-4. On your phone, open the GitHub Pages URL in Safari/Chrome and use **Share > Add to Home Screen** for app-like access
-
-The recorder frontend calls the Apps Script backend via `fetch()` for configuration loading and audio upload. The `Content-Type: text/plain` header is used intentionally to avoid CORS preflight requests.
-
-## Usage
-
-### Recording Discussions
-
-**Option A: Use the Recorder web app (recommended)**
-
-1. Make sure you've synced your Canvas roster first (this helps speaker diarization accuracy)
-2. Open the Recorder on your phone
-3. If multi-course is enabled, select the course first, then the section
-4. Tap the record button and have students introduce themselves at the beginning
-5. Use pause/resume as needed
-6. Tap stop when the discussion ends
-7. Confirm the section and date, then tap Upload
-8. The file lands in the Drive upload folder with the correct filename — the processing pipeline takes it from there
-
-**Option B: Manual upload**
-
-1. Record your Harkness discussion on your phone
-2. **Important**: Have students introduce themselves at the beginning ("Hi, I'm [name]")
-3. Upload the audio file to the "Upload" folder in Google Drive
-4. Name the file like `Section 1 - 2024-01-15.m4a` so section and date are auto-detected
-
-### Processing Workflow
-
-1. **Automatic**: System detects new audio file (checks every 10 minutes)
-2. **Automatic**: ElevenLabs transcribes with speaker diarization (synchronous — no polling needed)
-3. **Automatic**: Gemini identifies speakers from introductions, populates SpeakerMap sheet
-4. **Manual** (individual mode): Review/correct speaker names in the SpeakerMap sheet
-5. **Manual**: Enter grade(s) — one grade on the Discussion row (group mode) or per-student in StudentReports (individual mode)
-6. **Manual**: Click "Generate Feedback" from the menu — Gemini writes feedback
-7. **Manual**: Review/edit feedback, check the approved box(es)
-8. **Manual**: Click "Send Approved Feedback" from the menu
-
-### Google Sheets Structure
+### Google Sheets Structure (8 sheets)
 
 | Sheet | Purpose |
 |-------|---------|
@@ -188,17 +152,53 @@ Controlled by the `mode` setting in the Settings sheet:
 - **Group mode** (`group`): One grade and one feedback for the whole class. Stored on the Discussion row. Speaker map auto-confirms.
 - **Individual mode** (`individual`): Per-student grades and feedback. Stored in StudentReports rows. Teacher must confirm speaker map before proceeding.
 
+---
+
+## Customization
+
+### Settings Sheet
+
+Key settings you can change:
+
+| Setting | Default | Description |
+|---------|---------|-------------|
+| `mode` | `group` | `group` = one grade for the class; `individual` = per-student grades |
+| `distribute_email` | `true` | Send feedback via email |
+| `distribute_canvas` | `false` | Post grades to Canvas (configure first) |
+| `grade_scale` | `0-100` | Grade scale description |
+| `teacher_email` | | Your email for reply-to |
+| `email_subject_template` | `Harkness Discussion Report - {date}` | Email subject line |
+
+### Prompts Sheet
+
+All AI prompts are editable in the Prompts sheet. You can customize:
+- **SPEAKER_IDENTIFICATION** — How Gemini identifies speakers from introductions
+- **GROUP_FEEDBACK** — The group feedback format and tone
+- **INDIVIDUAL_FEEDBACK** — Per-student feedback format
+
+Edit prompts directly in the sheet — no code changes needed.
+
+### Canvas Integration
+
+Click **Harkness Helper > Configure Canvas Course** to set up Canvas grade posting:
+1. Enter your Canvas base URL
+2. Enter a Canvas API token
+3. Enter the course ID
+
+Rosters are synced automatically. To switch courses or re-sync, run the dialog again.
+
 ### Multi-Course Support
 
-If you teach multiple courses (e.g., AP English and World History), you can manage them all from one spreadsheet.
+If you teach multiple courses that use Harkness discussions, you can track them all in one spreadsheet:
 
-**Setup:**
-1. Click **Enable Multi-Course** from the Harkness Helper menu
-2. This creates a **Courses** sheet and adds a `course` column to Discussions and Students
-3. Rename "My Course" to your actual course name, add additional courses with their Canvas course IDs
-4. Run **Sync Canvas Roster** for each course (or **Sync All Course Rosters** to sync all at once)
+1. Click **Harkness Helper > Enable Multi-Course** (or add rows to the **Courses** sheet manually)
+2. Add each course's name, Canvas course ID, and Canvas base URL
+3. When uploading audio, prefix the filename with the course name: `AP English - Section 2 - 2025-01-15.m4a`
+4. Use **Sync All Course Rosters** to sync students from all configured courses at once
+5. Each discussion row has a `course` column to track which course it belongs to
 
 **Courses sheet columns:**
+
 | Column | Purpose |
 |--------|---------|
 | `course_name` | Friendly name (e.g., "AP English") |
@@ -206,14 +206,29 @@ If you teach multiple courses (e.g., AP English and World History), you can mana
 | `canvas_base_url` | Optional override (falls back to global Settings) |
 | `canvas_item_type` | Optional override: "assignment" or "discussion" |
 
-**How it works:**
-- Each Discussion and Student row has a `course` column linking to the Courses sheet
-- Grade posting, roster sync, and email distribution are course-aware
-- The Recorder web app shows a course picker when multi-course mode is enabled
-- Filenames include the course name: `AP English - Section 1 - 2025-02-20.webm`
-- If a discussion's `course` column is empty, the system falls back to the global `canvas_course_id` in Settings
+Fully backward compatible — if you don't enable multi-course, everything works exactly as before.
 
-**Backward compatible:** If you don't enable multi-course, everything works exactly as before.
+---
+
+## Mobile Recorder (Optional)
+
+Record discussions directly from your phone using the built-in recorder app. The recorder is hosted on **GitHub Pages** (not served from Apps Script) because Apps Script's sandboxed iframe blocks microphone access.
+
+### Backend setup
+
+1. In the script editor, click **Deploy > New deployment**
+2. Choose **Web app**, set "Execute as" to **Me**, and "Who has access" to **Anyone** (not "Anyone with a Google account" — the GitHub Pages frontend needs unauthenticated API access)
+3. Click **Deploy** and copy the deployment URL
+
+### Frontend setup
+
+4. In `docs/index.html`, replace `DEPLOYMENT_ID` in the `APPS_SCRIPT_URL` variable with the deployment ID from the URL above
+5. Push to GitHub and enable GitHub Pages: **Settings > Pages > Source: main branch, `/docs` folder**
+6. On your phone, open the GitHub Pages URL and use **Share > Add to Home Screen** for app-like access
+
+The recorder lets you pick a section, date, and (in multi-course mode) course, then uploads the recording directly to your Upload folder.
+
+---
 
 ## File Naming Convention
 
@@ -225,51 +240,45 @@ For best results, name your audio files like:
 Multi-course format (course name prefix is auto-detected):
 - `AP English - Section 1 - 2024-01-15.m4a`
 
-## Customizing Prompts
+---
 
-All AI prompts live in the **Prompts sheet**. You can customize:
-- Speaker identification instructions
-- How participation is evaluated
-- Grading criteria and scale
-- Feedback tone and style (default: 2-paragraph critique sandwich)
+## Costs
 
-Edit prompts directly in the sheet — no code changes needed.
+- **Transcription**: ~$0.37/hour via ElevenLabs Scribe v2
+- **AI Feedback**: Free via Gemini's free tier (gemini-2.0-flash)
+- **Everything else**: Free (Google Sheets, Apps Script, Gmail)
 
-## Estimated Costs
-
-| Service | Cost |
-|---------|------|
-| ElevenLabs | Scribe v2 pricing (check current rates at elevenlabs.io) |
-| Google Gemini 2.0 Flash | Free tier usually sufficient |
-| Canvas API | Free |
-| Google Apps Script | Free |
+---
 
 ## Troubleshooting
 
-### "Configuration incomplete" error
-Run `testConfiguration()` from the script editor to see which API keys are missing.
+**"Setup Wizard" doesn't appear in the menu**
+- Refresh the spreadsheet page and wait 5-10 seconds. The menu loads when the sheet opens.
 
-### Transcription stuck in "transcribing"
-- The system auto-detects stuck transcriptions after 10 minutes and marks them as errors
-- Check the error_message column on the Discussions sheet
-- Try splitting very long audio files into shorter segments
+**Processing doesn't find my files**
+- Make sure files are in the `Harkness Helper / Upload` folder (not Processing or Completed)
+- Check that the file format is supported (mp3, m4a, wav, ogg, webm, aac, flac, mp4, mov)
 
-### Speaker identification wrong
+**Transcription shows "error" status**
+- Check the `error_message` column on the Discussions sheet
+- Very large files (>1 hour) may time out — try splitting the audio
+
+**Speaker identification wrong**
 - Students need clear introductions at the start
 - Sync your roster **before** recording — the system uses the student count to hint ElevenLabs on how many speakers to expect, which significantly improves diarization
 - You can manually edit speaker names in the SpeakerMap sheet
 - Click "Generate Feedback" again after correcting
 
-### Emails not sending
+**Canvas roster sync failed**
+- Double-check your Canvas API token, base URL, and course ID
+- Make sure your token has permission to access the course
+
+**Emails not sending**
 - Check students have email addresses in the Students sheet
 - Check Gmail sending limits (500/day for regular accounts)
 - Verify `distribute_email` is set to `true` in Settings
 
-### Canvas API errors
-- Token might have expired (create a new one)
-- Check CANVAS_BASE_URL doesn't have a trailing slash
-- Verify canvas_course_id is set in Settings
-- Set canvas_item_type to "assignment" or "discussion" in Settings
+---
 
 ## Privacy & Data
 
@@ -278,13 +287,8 @@ Run `testConfiguration()` from the script editor to see which API keys are missi
 - Transcripts and reports are stored in your Google Sheets (your control)
 - API keys are stored in Script Properties (encrypted by Google)
 
+---
+
 ## License
 
 MIT License - feel free to modify for your needs!
-
-## Support
-
-If you encounter issues:
-1. Check the Execution log in Apps Script (View > Executions)
-2. Run `testConfiguration()` to verify setup
-3. Open an issue on GitHub with the error message
