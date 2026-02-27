@@ -55,7 +55,8 @@ const CONFIG = {
   LIMITS: {
     MAX_AUDIO_SIZE_MB: 50,           // Blob vs URL threshold
     GAS_TIMEOUT_MS: 300000,          // 5 minutes (GAS limit is 6)
-    TRANSCRIPTION_TIMEOUT_MS: 600000 // 10 minutes before marking stuck
+    TRANSCRIPTION_TIMEOUT_MS: 600000, // 10 minutes before marking stuck
+    CELL_CHAR_LIMIT: 49500            // Google Sheets 50K per cell, with safety margin
   }
 };
 

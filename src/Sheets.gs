@@ -59,7 +59,8 @@ function initializeSheetHeaders(sheet, sheetName) {
       'name', 'email', 'section', 'course', 'canvas_user_id', 'student_id'
     ],
     [CONFIG.SHEETS.TRANSCRIPTS]: [
-      'discussion_id', 'raw_transcript', 'speaker_map', 'named_transcript',
+      'discussion_id', 'raw_transcript', 'raw_transcript_2',
+      'speaker_map', 'named_transcript', 'named_transcript_2',
       'created_at', 'updated_at'
     ],
     [CONFIG.SHEETS.SPEAKER_MAP]: [
@@ -382,13 +383,50 @@ function upsertStudent(data) {
 // ============================================================================
 
 /**
- * Create or update a transcript record
+ * Split a string into chunks that fit within the Sheets cell character limit.
+ * @param {string} text
+ * @returns {string[]} Array of [chunk1, chunk2]
+ */
+function splitForCells(text) {
+  const limit = CONFIG.LIMITS.CELL_CHAR_LIMIT;
+  if (!text || text.length <= limit) return [text || '', ''];
+  return [text.substring(0, limit), text.substring(limit)];
+}
+
+/**
+ * Join primary and overflow cell values back into a single string.
+ * @param {string} primary
+ * @param {string} overflow
+ * @returns {string}
+ */
+function joinFromCells(primary, overflow) {
+  const p = primary ? String(primary) : '';
+  const o = overflow ? String(overflow) : '';
+  return p + o;
+}
+
+/**
+ * Create or update a transcript record.
+ * Automatically splits raw_transcript and named_transcript across overflow
+ * columns if they exceed the Sheets cell character limit.
  * @param {string} discussionId
  * @param {Object} data
  */
 function upsertTranscript(discussionId, data) {
   const existing = findRow(CONFIG.SHEETS.TRANSCRIPTS, 'discussion_id', discussionId);
   const now = new Date().toISOString();
+
+  // Split long transcript fields into primary + overflow columns
+  if ('raw_transcript' in data) {
+    const parts = splitForCells(data.raw_transcript);
+    data.raw_transcript = parts[0];
+    data.raw_transcript_2 = parts[1];
+  }
+  if ('named_transcript' in data) {
+    const parts = splitForCells(data.named_transcript);
+    data.named_transcript = parts[0];
+    data.named_transcript_2 = parts[1];
+  }
 
   if (existing) {
     data.updated_at = now;
@@ -397,8 +435,10 @@ function upsertTranscript(discussionId, data) {
     insertRow(CONFIG.SHEETS.TRANSCRIPTS, {
       discussion_id: discussionId,
       raw_transcript: data.raw_transcript || '',
+      raw_transcript_2: data.raw_transcript_2 || '',
       speaker_map: data.speaker_map || '{}',
       named_transcript: data.named_transcript || '',
+      named_transcript_2: data.named_transcript_2 || '',
       created_at: now,
       updated_at: now
     });
@@ -406,12 +446,19 @@ function upsertTranscript(discussionId, data) {
 }
 
 /**
- * Get transcript for a discussion
+ * Get transcript for a discussion.
+ * Transparently joins overflow columns so callers always get the full text.
  * @param {string} discussionId
  * @returns {Object|null}
  */
 function getTranscript(discussionId) {
-  return findRow(CONFIG.SHEETS.TRANSCRIPTS, 'discussion_id', discussionId);
+  const row = findRow(CONFIG.SHEETS.TRANSCRIPTS, 'discussion_id', discussionId);
+  if (!row) return null;
+
+  // Join primary + overflow columns so downstream code sees full transcripts
+  row.raw_transcript = joinFromCells(row.raw_transcript, row.raw_transcript_2);
+  row.named_transcript = joinFromCells(row.named_transcript, row.named_transcript_2);
+  return row;
 }
 
 // ============================================================================
@@ -826,7 +873,8 @@ function reorderColumns() {
       'discussion_id', 'speaker_label', 'suggested_name', 'student_name', 'confirmed'
     ],
     [CONFIG.SHEETS.TRANSCRIPTS]: [
-      'discussion_id', 'raw_transcript', 'speaker_map', 'named_transcript',
+      'discussion_id', 'raw_transcript', 'raw_transcript_2',
+      'speaker_map', 'named_transcript', 'named_transcript_2',
       'created_at', 'updated_at'
     ]
   };
