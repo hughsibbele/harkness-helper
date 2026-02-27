@@ -83,8 +83,12 @@ function checkForNewAudioFiles() {
  * - "Period 3 - 2024-01-15.m4a" (legacy)
  * - "S3_20240115.mp3"
  * - "P3 Discussion.m4a" (date defaults to today)
+ * - "A Block - 2024-01-15.m4a" (block letter A-G)
+ * - "Block A - 2024-01-15.m4a"
+ * - Standalone letter A-G also recognized (e.g., "Chekhov A")
  * Multi-course format:
  * - "AP English - Section 3 - 2024-01-15.m4a"
+ * - "Chekhov A Block - 2024-01-15.m4a"
  *
  * @param {string} fileName
  * @returns {Object} {section, date, course}
@@ -112,6 +116,14 @@ function parseFileName(fileName) {
   const sectionMatch = fileName.match(/[SsPp](?:ection\s*|eriod\s*)?(\d+)/);
   if (sectionMatch) {
     section = `Section ${sectionMatch[1]}`;
+  } else {
+    // Try block formats: "Block A", "A Block", or standalone letter A-G
+    const blockMatch = fileName.match(/[Bb]lock\s*([A-Ga-g])/) ||
+                       fileName.match(/([A-Ga-g])\s*[Bb]lock/) ||
+                       fileName.match(/(?:^|\s|[-–—_])([A-Ga-g])(?:\s|[-–—_]|$)/);
+    if (blockMatch) {
+      section = `Block ${blockMatch[1].toUpperCase()}`;
+    }
   }
 
   // Try to extract date
