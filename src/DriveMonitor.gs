@@ -98,6 +98,9 @@ function parseFileName(fileName) {
   let date = new Date().toISOString().split('T')[0];  // Default to today
   let course = '';
 
+  // Strip file extension before parsing
+  fileName = fileName.replace(/\.\w+$/, '');
+
   // In multi-course mode, check if filename starts with a known course name
   if (isMultiCourseMode()) {
     const courses = getAllCourses();

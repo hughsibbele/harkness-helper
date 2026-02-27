@@ -146,11 +146,26 @@ function findRows(sheetName, columnName, value) {
 function insertRow(sheetName, data) {
   const sheet = getOrCreateSheet(sheetName);
   const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
-
   const rowData = headers.map(header => data[header] ?? '');
-  sheet.appendRow(rowData);
 
-  return sheet.getLastRow();
+  // Find the actual last row with content in column 1, not phantom checkbox rows.
+  // formatSheets applies checkbox validation to 1000 rows which fills them with FALSE,
+  // causing getLastRow()/appendRow to skip far past real data.
+  const lastRow = sheet.getLastRow();
+  let lastContentRow = 1; // at minimum, header row
+  if (lastRow > 1) {
+    const col1 = sheet.getRange(1, 1, lastRow, 1).getValues();
+    for (let i = col1.length - 1; i >= 1; i--) {
+      if (col1[i][0] !== '' && col1[i][0] !== null && col1[i][0] !== undefined) {
+        lastContentRow = i + 1; // 1-indexed
+        break;
+      }
+    }
+  }
+
+  const insertAt = lastContentRow + 1;
+  sheet.getRange(insertAt, 1, 1, rowData.length).setValues([rowData]);
+  return insertAt;
 }
 
 /**
